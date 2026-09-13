@@ -17,8 +17,8 @@ These can't be scripted — they need your Supabase/Anthropic/Vercel accounts.
 1. Create a project at [supabase.com](https://supabase.com) (Postgres + Auth + Storage, free tier).
 2. Project Settings → API: copy the Project URL and the `anon` public key.
 3. Project Settings → API: copy the `service_role` key (server-only, never expose this to the browser).
-4. Project Settings → Database → Connection string: copy the **pooled** connection string (port 6543).
-5. Paste all four into `.env.local` (copy `.env.local.example` first).
+4. Project Settings → Database → Connection string: copy both the **pooled** (transaction mode, port 6543) and **direct** (port 5432) connection strings.
+5. Paste all five into `.env.local` (copy `.env.local.example` first) — pooled goes in `DATABASE_URL` (app runtime), direct goes in `DIRECT_URL` (migrations only; see `drizzle.config.ts` for why they're split).
 
 ### 2. Database schema
 
