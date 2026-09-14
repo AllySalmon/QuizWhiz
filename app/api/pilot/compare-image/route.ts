@@ -7,7 +7,7 @@ import { getAnswerKeyByQuizCode } from "@/lib/db/queries/answerKeys";
 import { createRunItem } from "@/lib/db/queries/comparisonRuns";
 import { compareResult } from "@/lib/grading/compareResult";
 import type { GroundTruthRow } from "@/lib/csv/groundTruthImport";
-import { isSupportedImageType } from "@/lib/media/imageType";
+import { normalizeImageBuffer } from "@/lib/media/serverNormalize";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -50,20 +50,19 @@ export async function POST(request: Request) {
     }
     const groundTruth = JSON.parse(groundTruthRaw) as GroundTruthRow;
 
-    if (!isSupportedImageType(file.type)) {
+    // Always normalize to JPEG server-side — see lib/media/serverNormalize.ts.
+    const rawBuffer = Buffer.from(await file.arrayBuffer());
+    let buffer: Buffer;
+    try {
+      buffer = await normalizeImageBuffer(rawBuffer);
+    } catch (error) {
       return NextResponse.json(
-        {
-          ok: false,
-          error: `"${file.name}" is a ${file.type || "unknown"} file, which isn't supported. Use JPG, PNG, GIF, or WEBP.`,
-        },
+        { ok: false, error: error instanceof Error ? error.message : `Couldn't read "${file.name}".` },
         { status: 400 }
       );
     }
-
-    const buffer = Buffer.from(await file.arrayBuffer());
-    const mediaType = file.type;
-    const extension = mediaType.split("/")[1] ?? "jpg";
-    const storagePath = `pilot/${runId}/${scanOrder}-${randomUUID()}.${extension}`;
+    const mediaType = "image/jpeg" as const;
+    const storagePath = `pilot/${runId}/${scanOrder}-${randomUUID()}.jpg`;
     await uploadScanImage(storagePath, buffer, mediaType);
 
     const read = await readTestSheet({ imageBase64: buffer.toString("base64"), mediaType });

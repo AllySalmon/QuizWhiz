@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Loader2, X, AlertTriangle } from "lucide-react";
-import { normalizeImageForUpload } from "@/lib/media/normalizeImage";
+import { tryNormalizeImageForUpload } from "@/lib/media/normalizeImage";
 
 const CONCURRENCY = 3;
 
@@ -70,7 +70,7 @@ export function ScanUploadForm() {
           setItems((prev) => prev.map((it, i) => (i === index ? { ...it, status: "uploading" } : it)));
 
           try {
-            const normalized = await normalizeImageForUpload(item.file);
+            const normalized = await tryNormalizeImageForUpload(item.file);
 
             const formData = new FormData();
             formData.append("image", normalized);
@@ -173,9 +173,7 @@ export function ScanUploadForm() {
         className="flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-border bg-card px-6 py-10 text-center hover:border-primary/40"
       >
         <span className="text-sm font-medium text-foreground">Choose photos or scanned images</span>
-        <span className="mt-1 text-xs text-muted-foreground">
-          Any common photo format — iPhone photos may need Safari to upload correctly
-        </span>
+        <span className="mt-1 text-xs text-muted-foreground">JPG, PNG, TIFF, HEIC — any common format</span>
         <input
           ref={inputRef}
           id="scan-files"

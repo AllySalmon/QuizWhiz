@@ -5,7 +5,7 @@ import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Loader2, AlertTriangle } from "lucide-react";
 import { parseGroundTruthCsv, type GroundTruthRow } from "@/lib/csv/groundTruthImport";
-import { normalizeImageForUpload } from "@/lib/media/normalizeImage";
+import { tryNormalizeImageForUpload } from "@/lib/media/normalizeImage";
 
 const CONCURRENCY = 3;
 
@@ -82,7 +82,7 @@ export function PilotRunForm() {
         while (nextIndex < images.length) {
           const index = nextIndex++;
           try {
-            const normalized = await normalizeImageForUpload(images[index]);
+            const normalized = await tryNormalizeImageForUpload(images[index]);
 
             const formData = new FormData();
             formData.append("image", normalized);
