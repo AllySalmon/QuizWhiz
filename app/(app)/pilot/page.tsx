@@ -8,7 +8,7 @@ export default async function PilotPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between">
+      <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">Accuracy Check</h1>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -16,7 +16,7 @@ export default async function PilotPage() {
             real grading — nothing here touches scores, review queues, or the roster.
           </p>
         </div>
-        <Button render={<Link href="/pilot/new">New Run</Link>} />
+        <Button className="shrink-0" render={<Link href="/pilot/new">New Run</Link>} />
       </div>
 
       {runs.length === 0 ? (
