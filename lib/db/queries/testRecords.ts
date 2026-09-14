@@ -50,10 +50,27 @@ const queueSelection = {
   answersJson: testRecords.answersJson,
   scorePercent: testRecords.scorePercent,
   passed: testRecords.passed,
+  gradingStatus: testRecords.gradingStatus,
+  assignmentStatus: testRecords.assignmentStatus,
   flagReasons: testRecords.flagReasons,
   scanImageRef: testRecords.scanImageRef,
   createdAt: testRecords.createdAt,
 };
+
+// Every test in a batch, regardless of status — the "what actually
+// happened to my scans" list. The review queues only ever show what's
+// currently outstanding, so once everything's resolved they go empty and
+// there's otherwise nowhere to see the results at all.
+export async function listTestRecordsForBatch(batchId: string) {
+  const db = getDb();
+  return db
+    .select(queueSelection)
+    .from(testRecords)
+    .leftJoin(answerKeys, eq(testRecords.quizCode, answerKeys.quizCode))
+    .leftJoin(teachers, eq(testRecords.resolvedTeacherId, teachers.id))
+    .where(eq(testRecords.batchId, batchId))
+    .orderBy(asc(testRecords.scanOrder));
+}
 
 export async function listGradingReviewQueue(batchId?: string) {
   const db = getDb();
