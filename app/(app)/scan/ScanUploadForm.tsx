@@ -3,7 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Loader2, X } from "lucide-react";
+import { Loader2, X, AlertTriangle } from "lucide-react";
+import { normalizeImageForUpload } from "@/lib/media/normalizeImage";
 
 const CONCURRENCY = 3;
 
@@ -13,6 +14,7 @@ type QueueItem = {
   file: File;
   scanOrder: number;
   status: ItemStatus;
+  errorMessage?: string;
 };
 
 function formatBatchLabel(date: Date) {
@@ -28,6 +30,7 @@ export function ScanUploadForm() {
   const [files, setFiles] = useState<File[]>([]);
   const [items, setItems] = useState<QueueItem[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [batchId, setBatchId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   function handleFilesSelected(fileList: FileList | null) {
@@ -56,7 +59,8 @@ export function ScanUploadForm() {
       });
       const batchJson = await batchRes.json();
       if (!batchJson.ok) throw new Error(batchJson.error ?? "Couldn't start the batch.");
-      const batchId = batchJson.batch.id as string;
+      const newBatchId = batchJson.batch.id as string;
+      setBatchId(newBatchId);
 
       let nextIndex = 0;
       async function worker() {
@@ -65,26 +69,36 @@ export function ScanUploadForm() {
           const item = queue[index];
           setItems((prev) => prev.map((it, i) => (i === index ? { ...it, status: "uploading" } : it)));
 
-          const formData = new FormData();
-          formData.append("image", item.file);
-          formData.append("batchId", batchId);
-          formData.append("scanOrder", String(item.scanOrder));
-
           try {
+            const normalized = await normalizeImageForUpload(item.file);
+
+            const formData = new FormData();
+            formData.append("image", normalized);
+            formData.append("batchId", newBatchId);
+            formData.append("scanOrder", String(item.scanOrder));
+
             const res = await fetch("/api/grading/process-image", { method: "POST", body: formData });
             const json = await res.json();
             setItems((prev) =>
-              prev.map((it, i) => (i === index ? { ...it, status: json.ok ? "done" : "failed" } : it))
+              prev.map((it, i) =>
+                i === index
+                  ? { ...it, status: json.ok ? "done" : "failed", errorMessage: json.ok ? undefined : json.error }
+                  : it
+              )
             );
-          } catch {
-            setItems((prev) => prev.map((it, i) => (i === index ? { ...it, status: "failed" } : it)));
+          } catch (err) {
+            setItems((prev) =>
+              prev.map((it, i) =>
+                i === index
+                  ? { ...it, status: "failed", errorMessage: err instanceof Error ? err.message : "Something went wrong." }
+                  : it
+              )
+            );
           }
         }
       }
 
       await Promise.all(Array.from({ length: Math.min(CONCURRENCY, queue.length) }, worker));
-
-      router.push(`/batches/${batchId}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
       setUploading(false);
@@ -92,8 +106,10 @@ export function ScanUploadForm() {
   }
 
   const doneCount = items.filter((i) => i.status === "done" || i.status === "failed").length;
+  const failedItems = items.filter((i) => i.status === "failed");
+  const finished = items.length > 0 && doneCount === items.length;
 
-  if (uploading) {
+  if (uploading && !finished) {
     return (
       <div className="rounded-xl border border-border bg-card p-6">
         <div className="flex items-center gap-3">
@@ -116,6 +132,40 @@ export function ScanUploadForm() {
     );
   }
 
+  if (uploading && finished) {
+    return (
+      <div className="rounded-xl border border-border bg-card p-6">
+        <p className="text-sm font-medium text-foreground">
+          {doneCount - failedItems.length} of {items.length} graded
+          {failedItems.length > 0 ? `, ${failedItems.length} failed` : ""}.
+        </p>
+
+        {failedItems.length > 0 && (
+          <div className="mt-3 flex flex-col gap-2">
+            {failedItems.map((item) => (
+              <div
+                key={item.scanOrder}
+                className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm"
+              >
+                <AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive" aria-hidden />
+                <div>
+                  <p className="font-medium text-foreground">{item.file.name}</p>
+                  <p className="text-muted-foreground">{item.errorMessage ?? "Unknown error."}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {batchId && (
+          <Button className="mt-4" onClick={() => router.push(`/batches/${batchId}`)}>
+            {failedItems.length > 0 ? "Continue to batch (failed ones need re-uploading)" : "View batch"}
+          </Button>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div>
       <label
@@ -123,7 +173,9 @@ export function ScanUploadForm() {
         className="flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-border bg-card px-6 py-10 text-center hover:border-primary/40"
       >
         <span className="text-sm font-medium text-foreground">Choose photos or scanned images</span>
-        <span className="mt-1 text-xs text-muted-foreground">JPG or PNG, any number of pages</span>
+        <span className="mt-1 text-xs text-muted-foreground">
+          Any common photo format — iPhone photos may need Safari to upload correctly
+        </span>
         <input
           ref={inputRef}
           id="scan-files"

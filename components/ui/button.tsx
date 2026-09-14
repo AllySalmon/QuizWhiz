@@ -1,3 +1,4 @@
+import * as React from "react"
 import { Button as ButtonPrimitive } from "@base-ui/react/button"
 import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "cn"
@@ -43,11 +44,21 @@ function Button({
   className,
   variant = "default",
   size = "default",
+  nativeButton,
+  render,
   ...props
 }: ButtonPrimitive.Props & VariantProps<typeof buttonVariants>) {
+  // When rendering as something other than a real <button> (e.g. a Next.js
+  // <Link>, via the render prop), base-ui needs nativeButton={false} or it
+  // warns in dev and applies the wrong a11y semantics. Auto-detect that
+  // case so call sites don't each have to remember it.
+  const autoNativeButton = React.isValidElement(render) && render.type !== "button" ? false : undefined;
+
   return (
     <ButtonPrimitive
       data-slot="button"
+      nativeButton={nativeButton ?? autoNativeButton}
+      render={render}
       className={cn(buttonVariants({ variant, size, className }))}
       {...props}
     />

@@ -7,6 +7,7 @@ import { getAnswerKeyByQuizCode } from "@/lib/db/queries/answerKeys";
 import { createRunItem } from "@/lib/db/queries/comparisonRuns";
 import { compareResult } from "@/lib/grading/compareResult";
 import type { GroundTruthRow } from "@/lib/csv/groundTruthImport";
+import { isSupportedImageType } from "@/lib/media/imageType";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -49,8 +50,18 @@ export async function POST(request: Request) {
     }
     const groundTruth = JSON.parse(groundTruthRaw) as GroundTruthRow;
 
+    if (!isSupportedImageType(file.type)) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: `"${file.name}" is a ${file.type || "unknown"} file, which isn't supported. Use JPG, PNG, GIF, or WEBP.`,
+        },
+        { status: 400 }
+      );
+    }
+
     const buffer = Buffer.from(await file.arrayBuffer());
-    const mediaType = (file.type || "image/jpeg") as "image/jpeg" | "image/png" | "image/webp" | "image/gif";
+    const mediaType = file.type;
     const extension = mediaType.split("/")[1] ?? "jpg";
     const storagePath = `pilot/${runId}/${scanOrder}-${randomUUID()}.${extension}`;
     await uploadScanImage(storagePath, buffer, mediaType);

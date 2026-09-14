@@ -3,8 +3,9 @@
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Loader2 } from "lucide-react";
+import { Loader2, AlertTriangle } from "lucide-react";
 import { parseGroundTruthCsv, type GroundTruthRow } from "@/lib/csv/groundTruthImport";
+import { normalizeImageForUpload } from "@/lib/media/normalizeImage";
 
 const CONCURRENCY = 3;
 
@@ -25,6 +26,8 @@ export function PilotRunForm() {
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState({ done: 0, total: 0 });
+  const [failures, setFailures] = useState<{ name: string; message: string }[]>([]);
+  const [runId, setRunId] = useState<string | null>(null);
 
   async function start() {
     setError(null);
@@ -58,6 +61,7 @@ export function PilotRunForm() {
 
     setUploading(true);
     setProgress({ done: 0, total: images.length });
+    setFailures([]);
 
     try {
       const runRes = await fetch("/api/pilot/runs", {
@@ -67,7 +71,8 @@ export function PilotRunForm() {
       });
       const runJson = await runRes.json();
       if (!runJson.ok) throw new Error(runJson.error ?? "Couldn't start the run.");
-      const runId = runJson.run.id as string;
+      const newRunId = runJson.run.id as string;
+      setRunId(newRunId);
 
       const validRows = rows as GroundTruthRow[];
       let nextIndex = 0;
@@ -76,17 +81,25 @@ export function PilotRunForm() {
       async function worker() {
         while (nextIndex < images.length) {
           const index = nextIndex++;
-          const formData = new FormData();
-          formData.append("image", images[index]);
-          formData.append("runId", runId);
-          formData.append("scanOrder", String(index + 1));
-          formData.append("groundTruth", JSON.stringify(validRows[index]));
-
           try {
-            await fetch("/api/pilot/compare-image", { method: "POST", body: formData });
-          } catch {
-            // Individual failures still show up in the run's results as missing/incomplete;
-            // the run itself continues so one bad image doesn't stall the batch.
+            const normalized = await normalizeImageForUpload(images[index]);
+
+            const formData = new FormData();
+            formData.append("image", normalized);
+            formData.append("runId", newRunId);
+            formData.append("scanOrder", String(index + 1));
+            formData.append("groundTruth", JSON.stringify(validRows[index]));
+
+            const res = await fetch("/api/pilot/compare-image", { method: "POST", body: formData });
+            const json = await res.json();
+            if (!json.ok) {
+              setFailures((prev) => [...prev, { name: images[index].name, message: json.error ?? "Unknown error." }]);
+            }
+          } catch (err) {
+            setFailures((prev) => [
+              ...prev,
+              { name: images[index].name, message: err instanceof Error ? err.message : "Something went wrong." },
+            ]);
           }
           doneCount++;
           setProgress({ done: doneCount, total: images.length });
@@ -94,15 +107,15 @@ export function PilotRunForm() {
       }
 
       await Promise.all(Array.from({ length: Math.min(CONCURRENCY, images.length) }, worker));
-
-      router.push(`/pilot/${runId}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
       setUploading(false);
     }
   }
 
-  if (uploading) {
+  const finished = progress.total > 0 && progress.done === progress.total;
+
+  if (uploading && !finished) {
     return (
       <div className="rounded-xl border border-border bg-card p-6">
         <div className="flex items-center gap-3">
@@ -117,6 +130,40 @@ export function PilotRunForm() {
             style={{ width: `${progress.total ? (progress.done / progress.total) * 100 : 0}%` }}
           />
         </div>
+      </div>
+    );
+  }
+
+  if (uploading && finished) {
+    return (
+      <div className="rounded-xl border border-border bg-card p-6">
+        <p className="text-sm font-medium text-foreground">
+          {progress.total - failures.length} of {progress.total} compared
+          {failures.length > 0 ? `, ${failures.length} failed` : ""}.
+        </p>
+
+        {failures.length > 0 && (
+          <div className="mt-3 flex flex-col gap-2">
+            {failures.map((f, i) => (
+              <div
+                key={i}
+                className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm"
+              >
+                <AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive" aria-hidden />
+                <div>
+                  <p className="font-medium text-foreground">{f.name}</p>
+                  <p className="text-muted-foreground">{f.message}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {runId && (
+          <Button className="mt-4" onClick={() => router.push(`/pilot/${runId}`)}>
+            View results
+          </Button>
+        )}
       </div>
     );
   }

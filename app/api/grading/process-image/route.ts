@@ -9,6 +9,7 @@ import { getTeacher } from "@/lib/db/queries/teachers";
 import { createTestRecord, maybeDeleteScanImage } from "@/lib/db/queries/testRecords";
 import { createBookReport } from "@/lib/db/queries/bookReports";
 import { scoreTest } from "@/lib/grading/scoreTest";
+import { isSupportedImageType } from "@/lib/media/imageType";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -50,8 +51,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, error: "Missing scanOrder." }, { status: 400 });
     }
 
+    if (!isSupportedImageType(file.type)) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: `"${file.name}" is a ${file.type || "unknown"} file, which isn't supported. Use JPG, PNG, GIF, or WEBP — if this came from an iPhone, it may be HEIC; re-save or export it as JPG first.`,
+        },
+        { status: 400 }
+      );
+    }
+
     const buffer = Buffer.from(await file.arrayBuffer());
-    const mediaType = (file.type || "image/jpeg") as "image/jpeg" | "image/png" | "image/webp" | "image/gif";
+    const mediaType = file.type;
     const extension = mediaType.split("/")[1] ?? "jpg";
     const storagePath = `${batchId}/${scanOrder}-${randomUUID()}.${extension}`;
 
