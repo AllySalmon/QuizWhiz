@@ -3,7 +3,10 @@ import { CheckCircle2, Circle } from "lucide-react";
 import { answerKeysExist } from "@/lib/db/queries/answerKeys";
 import { teachersExist } from "@/lib/db/queries/teachers";
 import { studentRosterExists } from "@/lib/db/queries/studentRoster";
+import { dashboardCounts } from "@/lib/db/queries/testRecords";
+import { countOutstandingBookReports } from "@/lib/db/queries/bookReports";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 
 // Docs/1-PRD.md §5.9 / Docs/2-App-Flow.md §2: the Home dashboard's primary
 // action is a guided setup checklist until Answer Keys, Teachers, and the
@@ -85,20 +88,28 @@ function SetupChecklist({
   );
 }
 
-function Dashboard() {
+async function Dashboard() {
+  const [counts, outstandingReports] = await Promise.all([dashboardCounts(), countOutstandingBookReports()]);
+
   return (
     <div>
-      <h1 className="text-2xl font-semibold tracking-tight text-foreground">Home</h1>
-      <p className="mt-1 text-sm text-muted-foreground">
-        Setup is complete. Scan &amp; Upload and the review queues arrive in Milestone 1b.
-      </p>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">Home</h1>
+        <Button render={<Link href="/scan">Scan &amp; Upload</Link>} />
+      </div>
 
       <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <StatCard label="Graded today" value="0" />
-        <StatCard label="Grading Review" value="0" />
-        <StatCard label="Needs Review" value="0" />
-        <StatCard label="Outstanding reports" value="0" />
+        <StatCard label="Graded today" value={String(counts.gradedToday)} />
+        <StatCard label="Grading Review" value={String(counts.gradingReview)} />
+        <StatCard label="Needs Review" value={String(counts.assignmentReview)} />
+        <StatCard label="Outstanding reports" value={String(outstandingReports)} />
       </div>
+
+      <p className="mt-6 text-sm text-muted-foreground">
+        The full Reports screen and Book Report Tracker (Outstanding/Escalated list, the escalation
+        banner) are Milestone 2 — the counts above are real, but there&apos;s no dedicated view for
+        them yet beyond the review queues.
+      </p>
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import "server-only";
-import { eq, asc } from "drizzle-orm";
+import { eq, asc, ilike } from "drizzle-orm";
 import { getDb } from "../client";
 import { answerKeys, answerKeyQuestions } from "../schema";
 
@@ -20,6 +20,23 @@ export async function getAnswerKeyWithQuestions(id: string) {
     .select()
     .from(answerKeyQuestions)
     .where(eq(answerKeyQuestions.answerKeyId, id))
+    .orderBy(asc(answerKeyQuestions.questionNumber));
+
+  return { ...key, questions };
+}
+
+// Looked up once per graded image, by the quiz code read off the sheet
+// (case-insensitive, trimmed — handwriting/print variance shouldn't cause
+// an otherwise-correct code to miss).
+export async function getAnswerKeyByQuizCode(quizCode: string) {
+  const db = getDb();
+  const [key] = await db.select().from(answerKeys).where(ilike(answerKeys.quizCode, quizCode.trim()));
+  if (!key) return null;
+
+  const questions = await db
+    .select()
+    .from(answerKeyQuestions)
+    .where(eq(answerKeyQuestions.answerKeyId, key.id))
     .orderBy(asc(answerKeyQuestions.questionNumber));
 
   return { ...key, questions };

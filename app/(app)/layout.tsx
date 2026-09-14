@@ -4,6 +4,8 @@ import { signOut } from "../login/actions";
 
 const NAV_LINKS = [
   { href: "/", label: "Home" },
+  { href: "/scan", label: "Scan & Upload" },
+  { href: "/review/grading", label: "Review" },
   { href: "/answer-keys", label: "Answer Keys" },
   { href: "/roster/teachers", label: "Roster" },
   { href: "/settings", label: "Settings" },
