@@ -22,33 +22,30 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <div className="flex flex-1 flex-col bg-background">
       <header className="border-b border-border bg-card">
-        {/* The header isn't constrained to max-w-5xl like the main content —
-            that width is for comfortable reading, not for a nav bar with 8+
-            items; capping it there was what forced wrapping regardless of
-            how much room the actual window had. max-w-7xl gives it real
-            room to sit on one line on a normal desktop window. flex-wrap
-            stays on as a fallback only (narrow windows, phone width) so it
-            degrades to wrapping instead of clipping/scrolling, rather than
-            being the expected everyday look. whitespace-nowrap keeps each
-            label from breaking mid-word if that fallback ever kicks in. The
-            account group uses ml-auto (not justify-between on the outer
-            container) so it stays right-aligned in both cases. */}
-        <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-5 gap-y-2 px-6 py-4">
-          <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
-            <span className="text-sm font-semibold whitespace-nowrap text-foreground">QuizWhiz</span>
-            <nav className="flex flex-wrap items-center gap-x-4 gap-y-2">
-              {NAV_LINKS.map((link) => (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  className="text-sm font-medium whitespace-nowrap text-muted-foreground transition-colors hover:text-foreground"
-                >
-                  {link.label}
-                </Link>
-              ))}
-            </nav>
-          </div>
-          <div className="ml-auto flex flex-shrink-0 items-center gap-3 whitespace-nowrap">
+        {/* True 3-part header via grid (auto | 1fr | auto): logo takes only
+            the width it needs on the left, account info the same on the
+            right, and nav centers in whatever space is left between them —
+            not just "centered within an equal third," which flex-1 on all
+            three would give and wouldn't actually center relative to the
+            row when logo/account aren't the same width. flex-wrap on nav
+            is a narrow-viewport fallback only; whitespace-nowrap keeps
+            labels from breaking mid-word if that ever kicks in. */}
+        <div className="mx-auto grid max-w-7xl grid-cols-[auto_1fr_auto] items-center gap-x-4 px-6 py-4">
+          <span className="text-sm font-semibold whitespace-nowrap text-foreground">QuizWhiz</span>
+
+          <nav className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
+            {NAV_LINKS.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                className="text-sm font-medium whitespace-nowrap text-muted-foreground transition-colors hover:text-foreground"
+              >
+                {link.label}
+              </Link>
+            ))}
+          </nav>
+
+          <div className="flex items-center gap-3 whitespace-nowrap">
             <span className="text-sm text-muted-foreground">{user?.email}</span>
             <form action={signOut}>
               <button
