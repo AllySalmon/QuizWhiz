@@ -4,7 +4,7 @@ import { getBatch } from "@/lib/db/queries/batches";
 import { countsForBatch, listTestRecordsForBatch } from "@/lib/db/queries/testRecords";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { BatchTestRecordsTable } from "./BatchTestRecordsTable";
 
 export default async function BatchSummaryPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -70,71 +70,10 @@ export default async function BatchSummaryPage({ params }: { params: Promise<{ i
       {records.length === 0 ? (
         <p className="mt-8 text-sm text-muted-foreground">No tests in this batch yet.</p>
       ) : (
-        <div className="mt-8 overflow-x-auto rounded-xl border border-border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>#</TableHead>
-                <TableHead>Book</TableHead>
-                <TableHead>Student #</TableHead>
-                <TableHead>Teacher</TableHead>
-                <TableHead>Score</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {records.map((r) => (
-                <TableRow key={r.id}>
-                  <TableCell className="text-muted-foreground">{r.scanOrder}</TableCell>
-                  <TableCell className="text-foreground">{r.bookTitle ?? r.quizCode ?? "—"}</TableCell>
-                  <TableCell className="font-mono text-sm">{r.studentNumber ?? "—"}</TableCell>
-                  <TableCell>
-                    {r.resolvedTeacherFirstName ? `${r.resolvedTeacherFirstName} ${r.resolvedTeacherLastName}` : "—"}
-                  </TableCell>
-                  <TableCell>
-                    {r.scorePercent !== null ? (
-                      <span className={r.passed ? "text-foreground" : "font-medium text-destructive"}>
-                        {Number(r.scorePercent).toFixed(0)}% {r.passed ? "" : "(fail)"}
-                      </span>
-                    ) : (
-                      "—"
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <StatusBadge gradingStatus={r.gradingStatus} assignmentStatus={r.assignmentStatus} />
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Link
-                      href={`/batches/${id}/${r.id}/delete`}
-                      className="text-sm font-medium text-destructive hover:underline"
-                    >
-                      Delete
-                    </Link>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+        <div className="mt-8">
+          <BatchTestRecordsTable batchId={id} records={records} />
         </div>
       )}
     </div>
   );
-}
-
-function StatusBadge({
-  gradingStatus,
-  assignmentStatus,
-}: {
-  gradingStatus: "clean" | "needs_grading_review" | "resolved";
-  assignmentStatus: "clean" | "needs_assignment_review" | "resolved";
-}) {
-  if (gradingStatus === "needs_grading_review") {
-    return <span className="text-sm text-destructive">Needs grading review</span>;
-  }
-  if (assignmentStatus === "needs_assignment_review") {
-    return <span className="text-sm text-destructive">Needs assignment review</span>;
-  }
-  const wasReviewed = gradingStatus === "resolved" || assignmentStatus === "resolved";
-  return <span className="text-sm text-muted-foreground">{wasReviewed ? "Resolved" : "Clean"}</span>;
 }

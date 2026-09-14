@@ -27,8 +27,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             no longer fit on one line) — with 8+ nav items this row doesn't
             always fit, and it needs to wrap cleanly rather than crowd
             together. whitespace-nowrap keeps each label from breaking
-            mid-word when that happens. */}
-        <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-x-6 gap-y-3 px-6 py-4">
+            mid-word when that happens. The account group uses ml-auto
+            (not justify-between on the outer container) so it stays
+            right-aligned whether it's sharing the first line or has
+            wrapped onto its own — justify-between would left-align a
+            lone wrapped item instead. */}
+        <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-6 gap-y-3 px-6 py-4">
           <div className="flex flex-wrap items-center gap-x-8 gap-y-2">
             <span className="text-sm font-semibold whitespace-nowrap text-foreground">QuizWhiz</span>
             <nav className="flex flex-wrap items-center gap-x-5 gap-y-2">
@@ -43,7 +47,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               ))}
             </nav>
           </div>
-          <div className="flex flex-shrink-0 items-center gap-3 whitespace-nowrap">
+          <div className="ml-auto flex flex-shrink-0 items-center gap-3 whitespace-nowrap">
             <span className="text-sm text-muted-foreground">{user?.email}</span>
             <form action={signOut}>
               <button

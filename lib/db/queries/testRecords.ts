@@ -1,5 +1,5 @@
 import "server-only";
-import { eq, and, asc, sql, gte } from "drizzle-orm";
+import { eq, and, asc, sql, gte, inArray } from "drizzle-orm";
 import { getDb } from "../client";
 import { testRecords, answerKeys, teachers, bookReports } from "../schema";
 import { deleteScanImage } from "@/lib/supabase/storage";
@@ -35,6 +35,12 @@ export async function getTestRecord(id: string) {
   const db = getDb();
   const [record] = await db.select().from(testRecords).where(eq(testRecords.id, id));
   return record ?? null;
+}
+
+export async function getTestRecordsByIds(ids: string[]) {
+  if (ids.length === 0) return [];
+  const db = getDb();
+  return db.select().from(testRecords).where(inArray(testRecords.id, ids)).orderBy(asc(testRecords.scanOrder));
 }
 
 const queueSelection = {
@@ -264,6 +270,14 @@ export async function deleteTestRecord(id: string) {
 
   const db = getDb();
   await db.delete(testRecords).where(eq(testRecords.id, id));
+}
+
+// Bulk variant — same per-record cleanup (book report, scan image) as
+// deleteTestRecord, for a multi-select "Delete selected" action.
+export async function deleteManyTestRecords(ids: string[]) {
+  for (const id of ids) {
+    await deleteTestRecord(id);
+  }
 }
 
 export async function countsForBatch(batchId: string) {
