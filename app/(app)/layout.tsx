@@ -22,20 +22,21 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <div className="flex flex-1 flex-col bg-background">
       <header className="border-b border-border bg-card">
-        {/* flex-wrap + an explicit gap (not just justify-between, which only
-            distributes free space and lets items visually touch once they
-            no longer fit on one line) — with 8+ nav items this row doesn't
-            always fit, and it needs to wrap cleanly rather than crowd
-            together. whitespace-nowrap keeps each label from breaking
-            mid-word when that happens. The account group uses ml-auto
-            (not justify-between on the outer container) so it stays
-            right-aligned whether it's sharing the first line or has
-            wrapped onto its own — justify-between would left-align a
-            lone wrapped item instead. */}
-        <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-6 gap-y-3 px-6 py-4">
-          <div className="flex flex-wrap items-center gap-x-8 gap-y-2">
+        {/* The header isn't constrained to max-w-5xl like the main content —
+            that width is for comfortable reading, not for a nav bar with 8+
+            items; capping it there was what forced wrapping regardless of
+            how much room the actual window had. max-w-7xl gives it real
+            room to sit on one line on a normal desktop window. flex-wrap
+            stays on as a fallback only (narrow windows, phone width) so it
+            degrades to wrapping instead of clipping/scrolling, rather than
+            being the expected everyday look. whitespace-nowrap keeps each
+            label from breaking mid-word if that fallback ever kicks in. The
+            account group uses ml-auto (not justify-between on the outer
+            container) so it stays right-aligned in both cases. */}
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-5 gap-y-2 px-6 py-4">
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
             <span className="text-sm font-semibold whitespace-nowrap text-foreground">QuizWhiz</span>
-            <nav className="flex flex-wrap items-center gap-x-5 gap-y-2">
+            <nav className="flex flex-wrap items-center gap-x-4 gap-y-2">
               {NAV_LINKS.map((link) => (
                 <Link
                   key={link.href}
