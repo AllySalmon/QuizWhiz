@@ -1,0 +1,1 @@
+ALTER TABLE "comparison_run_items" ADD COLUMN "scan_image_ref" text;

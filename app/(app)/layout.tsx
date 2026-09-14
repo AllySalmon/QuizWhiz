@@ -8,6 +8,7 @@ const NAV_LINKS = [
   { href: "/review/grading", label: "Review" },
   { href: "/answer-keys", label: "Answer Keys" },
   { href: "/roster/teachers", label: "Roster" },
+  { href: "/pilot", label: "Accuracy Check" },
   { href: "/settings", label: "Settings" },
 ];
 

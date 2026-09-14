@@ -177,3 +177,59 @@ export const auditLog = pgTable("audit_log", {
   details: jsonb("details").notNull().default({}),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`now()`),
 });
+
+// --- Milestone 1c: accuracy-pilot tooling tables ---
+// Not part of Docs/5-Backend-Schema.md (that doc predates this feature) —
+// these are internal tooling for the AI-vs-known-score comparison tool
+// (Docs/6-Implementation-Plan.md §3), entirely separate from real grading.
+// A comparison run never touches test_records, book_reports, or the roster.
+
+export const comparisonRuns = pgTable("comparison_runs", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  label: text("label").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`now()`),
+});
+
+export const comparisonRunItems = pgTable(
+  "comparison_run_items",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    runId: uuid("run_id")
+      .notNull()
+      .references(() => comparisonRuns.id),
+    scanOrder: integer("scan_order").notNull(),
+
+    // Same private bucket as real grading (lib/supabase/storage.ts), under a
+    // pilot/ prefix. Not subject to test_records' retention policy — these
+    // aren't real graded tests, so nothing auto-deletes them.
+    scanImageRef: text("scan_image_ref"),
+
+    // Ground truth, from the librarian's CSV (lib/csv/groundTruthImport.ts)
+    quizCode: text("quiz_code").notNull(),
+    studentNumber: text("student_number").notNull(),
+    teacherLastName: text("teacher_last_name").notNull(),
+    answersJson: jsonb("answers_json").notNull().default({}),
+
+    // What the AI actually read (lib/anthropic/testSheetRead.ts), unchanged from production
+    aiQuizCode: text("ai_quiz_code"),
+    aiStudentNumber: text("ai_student_number"),
+    aiTeacherLastName: text("ai_teacher_last_name"),
+    aiAnswersJson: jsonb("ai_answers_json").notNull().default({}),
+
+    // Derived comparison (lib/grading/compareResult.ts) — typed columns so
+    // aggregate accuracy stats can be queried directly, not recomputed from JSON.
+    quizCodeMatch: boolean("quiz_code_match").notNull(),
+    studentNumberMatch: boolean("student_number_match").notNull(),
+    teacherNameMatch: boolean("teacher_name_match").notNull(),
+    answerMatchCount: integer("answer_match_count").notNull(),
+    totalQuestions: integer("total_questions").notNull(),
+    groundTruthScore: numeric("ground_truth_score").notNull(),
+    aiScore: numeric("ai_score"), // null when the AI's quiz code didn't match any key
+    scoreMatch: boolean("score_match").notNull(),
+    wouldHaveBeenClean: boolean("would_have_been_clean").notNull(), // scoreTest() would have flagged nothing
+    falseClean: boolean("false_clean").notNull(), // clean AND wrong — the number that matters most (Docs/1-PRD.md §7)
+
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`now()`),
+  },
+  (table) => [index("comparison_run_items_run_id_idx").on(table.runId)]
+);
