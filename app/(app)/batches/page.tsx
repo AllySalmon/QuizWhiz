@@ -29,9 +29,15 @@ export default async function BatchesPage() {
                 <TableRow key={batch.id}>
                   <TableCell className="text-foreground">{batch.label}</TableCell>
                   <TableCell>{batch.itemCount}</TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="flex justify-end gap-4 text-right">
                     <Link href={`/batches/${batch.id}`} className="text-sm font-medium text-primary hover:underline">
                       View
+                    </Link>
+                    <Link
+                      href={`/batches/${batch.id}/delete`}
+                      className="text-sm font-medium text-destructive hover:underline"
+                    >
+                      Delete
                     </Link>
                   </TableCell>
                 </TableRow>

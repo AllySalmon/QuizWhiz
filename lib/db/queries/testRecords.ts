@@ -247,6 +247,25 @@ export async function maybeDeleteScanImage(id: string) {
   await db.update(testRecords).set({ scanImageRef: null }).where(eq(testRecords.id, id));
 }
 
+// Deletes one scanned test entirely: its book report (if any), its scan
+// image in storage (if not already cleared by retention), then the
+// test_records row itself. Used for a single mis-scanned/duplicate entry;
+// see deleteBatch in lib/db/queries/batches.ts for removing a whole batch.
+export async function deleteTestRecord(id: string) {
+  const record = await getTestRecord(id);
+  if (!record) return;
+
+  await deleteBookReportByTestRecordId(id);
+  if (record.scanImageRef) {
+    await deleteScanImage(record.scanImageRef).catch(() => {
+      // Already gone (retention cleanup, or never uploaded) — fine to continue.
+    });
+  }
+
+  const db = getDb();
+  await db.delete(testRecords).where(eq(testRecords.id, id));
+}
+
 export async function countsForBatch(batchId: string) {
   const db = getDb();
   const rows = await db

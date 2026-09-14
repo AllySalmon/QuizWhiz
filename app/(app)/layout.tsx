@@ -22,22 +22,28 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <div className="flex flex-1 flex-col bg-background">
       <header className="border-b border-border bg-card">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
-          <div className="flex items-center gap-8">
-            <span className="text-sm font-semibold text-foreground">QuizWhiz</span>
-            <nav className="flex items-center gap-5">
+        {/* flex-wrap + an explicit gap (not just justify-between, which only
+            distributes free space and lets items visually touch once they
+            no longer fit on one line) — with 8+ nav items this row doesn't
+            always fit, and it needs to wrap cleanly rather than crowd
+            together. whitespace-nowrap keeps each label from breaking
+            mid-word when that happens. */}
+        <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-x-6 gap-y-3 px-6 py-4">
+          <div className="flex flex-wrap items-center gap-x-8 gap-y-2">
+            <span className="text-sm font-semibold whitespace-nowrap text-foreground">QuizWhiz</span>
+            <nav className="flex flex-wrap items-center gap-x-5 gap-y-2">
               {NAV_LINKS.map((link) => (
                 <Link
                   key={link.href}
                   href={link.href}
-                  className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+                  className="text-sm font-medium whitespace-nowrap text-muted-foreground transition-colors hover:text-foreground"
                 >
                   {link.label}
                 </Link>
               ))}
             </nav>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-shrink-0 items-center gap-3 whitespace-nowrap">
             <span className="text-sm text-muted-foreground">{user?.email}</span>
             <form action={signOut}>
               <button

@@ -17,8 +17,15 @@ export default async function BatchSummaryPage({ params }: { params: Promise<{ i
 
   return (
     <div>
-      <h1 className="text-2xl font-semibold tracking-tight text-foreground">{batch.label}</h1>
-      <p className="mt-1 text-sm text-muted-foreground">{counts.total} tests graded</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">{batch.label}</h1>
+          <p className="mt-1 text-sm text-muted-foreground">{counts.total} tests graded</p>
+        </div>
+        <Link href={`/batches/${id}/delete`} className="text-sm font-medium text-destructive hover:underline">
+          Delete batch
+        </Link>
+      </div>
 
       <div className="mt-6 grid grid-cols-3 gap-4 sm:max-w-lg">
         <Card>
@@ -73,6 +80,7 @@ export default async function BatchSummaryPage({ params }: { params: Promise<{ i
                 <TableHead>Teacher</TableHead>
                 <TableHead>Score</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead />
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -95,6 +103,14 @@ export default async function BatchSummaryPage({ params }: { params: Promise<{ i
                   </TableCell>
                   <TableCell>
                     <StatusBadge gradingStatus={r.gradingStatus} assignmentStatus={r.assignmentStatus} />
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Link
+                      href={`/batches/${id}/${r.id}/delete`}
+                      className="text-sm font-medium text-destructive hover:underline"
+                    >
+                      Delete
+                    </Link>
                   </TableCell>
                 </TableRow>
               ))}
