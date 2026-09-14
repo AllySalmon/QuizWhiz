@@ -5,6 +5,7 @@ import {
   createTeacher,
   renameTeacher,
   reassignAndDeleteTeacher,
+  reassignAndDeleteTeachers,
   findTeacherByFullName,
   listActiveTeachers,
   createManyTeachers,
@@ -96,5 +97,28 @@ export async function reassignAndDeleteTeacherAction(
   }
 
   await reassignAndDeleteTeacher(teacherId, assignments);
+  redirect("/roster/teachers");
+}
+
+export async function reassignAndDeleteTeachersAction(
+  teacherIds: string[],
+  studentNumbers: string[],
+  _prevState: DeleteTeacherState,
+  formData: FormData
+): Promise<DeleteTeacherState> {
+  const assignments: { studentNumber: string; newTeacherId: string }[] = [];
+
+  for (const studentNumber of studentNumbers) {
+    const newTeacherId = formData.get(`teacher_for_${studentNumber}`);
+    if (typeof newTeacherId !== "string" || !newTeacherId) {
+      return { error: "Choose a teacher for every student before removing these teachers." };
+    }
+    if (teacherIds.includes(newTeacherId)) {
+      return { error: "Students can't be reassigned to a teacher also being removed." };
+    }
+    assignments.push({ studentNumber, newTeacherId });
+  }
+
+  await reassignAndDeleteTeachers(teacherIds, assignments);
   redirect("/roster/teachers");
 }

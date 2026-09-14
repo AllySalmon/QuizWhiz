@@ -1,7 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { upsertStudent, upsertManyStudents, deleteStudent, getStudent } from "@/lib/db/queries/studentRoster";
+import { upsertStudent, upsertManyStudents, deleteStudent, deleteManyStudents, getStudent } from "@/lib/db/queries/studentRoster";
 import type { GradeBand } from "@/lib/db/queries/answerKeys";
 import { listActiveTeachers } from "@/lib/db/queries/teachers";
 import { parseStudentRosterCsv, type ImportSummary } from "@/lib/csv/studentRosterImport";
@@ -71,6 +71,11 @@ export async function upsertStudentAction(
 
 export async function deleteStudentAction(studentNumber: string) {
   await deleteStudent(studentNumber);
+  redirect("/roster/students");
+}
+
+export async function deleteManyStudentsAction(studentNumbers: string[]) {
+  await deleteManyStudents(studentNumbers);
   redirect("/roster/students");
 }
 

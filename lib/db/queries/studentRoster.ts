@@ -1,8 +1,18 @@
 import "server-only";
-import { eq, ilike, or, asc } from "drizzle-orm";
+import { eq, ilike, or, asc, inArray, sql } from "drizzle-orm";
 import { getDb } from "../client";
 import { studentRoster, teachers, auditLog } from "../schema";
 import type { GradeBand } from "./answerKeys";
+
+// Grade first (Jr. before 3-5, matching the SSYRA program sequence — not
+// alphabetical, since "3-5" would otherwise sort before "jr"), then
+// teacher's last name, then student number. No student names exist in this
+// schema to sort by (Docs/1-PRD.md §6) — student number is the identifier.
+const STUDENT_LIST_ORDER = [
+  sql`case when ${studentRoster.gradeBand} = 'jr' then 0 else 1 end`,
+  asc(teachers.lastName),
+  asc(studentRoster.studentNumber),
+];
 
 export async function listStudents(search?: string) {
   const db = getDb();
@@ -27,7 +37,7 @@ export async function listStudents(search?: string) {
       )
     : base;
 
-  return query.orderBy(asc(studentRoster.studentNumber));
+  return query.orderBy(...STUDENT_LIST_ORDER);
 }
 
 export async function getStudent(studentNumber: string) {
@@ -96,6 +106,23 @@ export async function deleteStudent(studentNumber: string) {
       details: {},
     });
   });
+}
+
+// Bulk variant of deleteStudent — no reassignment needed (unlike teachers),
+// since deleting a student just removes their roster row.
+export async function deleteManyStudents(studentNumbers: string[]) {
+  if (studentNumbers.length === 0) return 0;
+  const db = getDb();
+  await db.transaction(async (tx) => {
+    await tx.delete(studentRoster).where(inArray(studentRoster.studentNumber, studentNumbers));
+    await tx.insert(auditLog).values({
+      action: "students_bulk_deleted",
+      entityType: "student_roster",
+      entityId: studentNumbers.join(","),
+      details: { studentNumbers },
+    });
+  });
+  return studentNumbers.length;
 }
 
 export async function studentRosterExists() {
