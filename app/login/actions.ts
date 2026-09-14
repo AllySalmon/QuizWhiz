@@ -18,6 +18,14 @@ export async function signIn(_prevState: SignInState, formData: FormData): Promi
   const supabase = await createClient();
   const { error } = await supabase.auth.signInWithPassword({ email, password });
 
+  // Outcome only — never log the password. Timestamped so attempts are easy
+  // to correlate one-to-one during manual testing.
+  console.log(
+    `[login] ${new Date().toISOString()} email=${email} passwordLength=${password.length} result=${
+      error ? `REJECTED (${error.message})` : "SUCCESS"
+    }`
+  );
+
   if (error) {
     return { error: "Couldn't sign in. Check your email and password and try again." };
   }
