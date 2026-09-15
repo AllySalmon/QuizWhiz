@@ -76,13 +76,9 @@ export function StudentsTable({ students }: { students: Student[] }) {
                   />
                 </TableCell>
                 <TableCell className="font-mono text-sm">
-                  {student.teacherId ? (
-                    <Link href={`/roster/teachers/${student.teacherId}`} className="hover:underline">
-                      {student.studentNumber}
-                    </Link>
-                  ) : (
-                    student.studentNumber
-                  )}
+                  <Link href={`/students/${student.studentNumber}`} className="hover:underline">
+                    {student.studentNumber}
+                  </Link>
                 </TableCell>
                 <TableCell>
                   {student.teacherFirstName ? `${student.teacherFirstName} ${student.teacherLastName}` : "—"}

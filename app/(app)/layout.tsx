@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Search } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "../login/actions";
 
@@ -46,14 +47,29 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             ))}
           </nav>
 
-          <div className="flex items-center gap-3 whitespace-nowrap">
-            <span className="text-sm text-muted-foreground">{user?.email}</span>
-            <form action={signOut}>
-              <button
-                type="submit"
-                className="inline-block text-sm font-medium text-muted-foreground transition-all duration-150 hover:scale-110 hover:font-semibold hover:text-primary"
-              >
-                Sign out
+          <div className="flex flex-col items-end gap-2">
+            <div className="flex items-center gap-3 whitespace-nowrap">
+              <span className="text-sm text-muted-foreground">{user?.email}</span>
+              <form action={signOut}>
+                <button
+                  type="submit"
+                  className="inline-block text-sm font-medium text-muted-foreground transition-all duration-150 hover:scale-110 hover:font-semibold hover:text-primary"
+                >
+                  Sign out
+                </button>
+              </form>
+            </div>
+
+            <form action="/search" className="flex items-center gap-1.5">
+              <input
+                type="search"
+                name="q"
+                placeholder="Search students, teachers, quizzes…"
+                aria-label="Search students, teachers, or quizzes"
+                className="h-8 w-44 rounded-lg border border-border bg-background px-2.5 text-sm text-foreground placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+              />
+              <button type="submit" aria-label="Search" className="text-muted-foreground hover:text-primary">
+                <Search className="size-4" aria-hidden />
               </button>
             </form>
           </div>

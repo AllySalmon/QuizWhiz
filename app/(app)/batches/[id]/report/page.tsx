@@ -59,7 +59,15 @@ export default async function BatchReportPage({ params }: { params: Promise<{ id
                   <TableBody>
                     {group.rows.map((row) => (
                       <TableRow key={row.id}>
-                        <TableCell className="font-mono text-sm">{row.studentNumber ?? "—"}</TableCell>
+                        <TableCell className="font-mono text-sm">
+                          {row.studentNumber ? (
+                            <Link href={`/students/${row.studentNumber}`} className="hover:underline">
+                              {row.studentNumber}
+                            </Link>
+                          ) : (
+                            "—"
+                          )}
+                        </TableCell>
                         <TableCell className="text-foreground">{row.bookTitle ?? row.quizCode ?? "—"}</TableCell>
                         <TableCell>
                           {row.scorePercent !== null ? `${Number(row.scorePercent).toFixed(0)}%` : "—"}

@@ -41,7 +41,15 @@ export default async function GradingReviewPage({
               {items.map((item) => (
                 <TableRow key={item.id}>
                   <TableCell className="text-foreground">{item.bookTitle ?? item.quizCode ?? "—"}</TableCell>
-                  <TableCell className="font-mono text-sm">{item.studentNumber ?? "—"}</TableCell>
+                  <TableCell className="font-mono text-sm">
+                    {item.studentNumber ? (
+                      <Link href={`/students/${item.studentNumber}`} className="hover:underline">
+                        {item.studentNumber}
+                      </Link>
+                    ) : (
+                      "—"
+                    )}
+                  </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
                     <div className="flex flex-col gap-1">
                       <span className="flex items-center gap-1.5">

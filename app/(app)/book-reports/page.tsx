@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { AlertTriangle } from "lucide-react";
 import { listOutstandingGroupedByTeacher } from "@/lib/db/queries/bookReports";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -52,7 +53,11 @@ export default async function BookReportsPage() {
                       );
                       return (
                         <TableRow key={report.id}>
-                          <TableCell className="font-mono text-sm">{report.studentNumber}</TableCell>
+                          <TableCell className="font-mono text-sm">
+                            <Link href={`/students/${report.studentNumber}`} className="hover:underline">
+                              {report.studentNumber}
+                            </Link>
+                          </TableCell>
                           <TableCell className="text-foreground">{report.bookTitle ?? "—"}</TableCell>
                           <TableCell className="text-sm">
                             <span className="flex items-center gap-1.5">

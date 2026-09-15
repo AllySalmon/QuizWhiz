@@ -1,5 +1,5 @@
 import "server-only";
-import { eq, and, asc, sql, gte, inArray, ilike, ne } from "drizzle-orm";
+import { eq, and, asc, desc, sql, gte, inArray, ilike, ne } from "drizzle-orm";
 import { getDb } from "../client";
 import { testRecords, answerKeys, teachers, bookReports } from "../schema";
 import { deleteScanImage } from "@/lib/supabase/storage";
@@ -499,4 +499,24 @@ export async function countPossibleDuplicates() {
   const db = getDb();
   const [row] = await db.select({ count: sql<number>`count(*)::int` }).from(testRecords).where(POSSIBLE_DUPLICATE);
   return row?.count ?? 0;
+}
+
+// The student history page's data — every test this student number has
+// ever had, regardless of status (same "what actually happened" philosophy
+// as listTestRecordsForBatch, not the Reports screen's exclude-and-link-back
+// one — a test stuck in review still belongs here). Includes a scored but
+// not-yet-assigned test with its real score, since grading and assignment
+// are independent tracks (Docs/5-Backend-Schema.md §1). The book-report
+// left join means a failing test's report status comes back in the same
+// query, no second round trip.
+export async function getStudentTestHistory(studentNumber: string) {
+  const db = getDb();
+  return db
+    .select({ ...queueSelection, bookReportStatus: bookReports.status })
+    .from(testRecords)
+    .leftJoin(answerKeys, eq(testRecords.quizCode, answerKeys.quizCode))
+    .leftJoin(teachers, eq(testRecords.resolvedTeacherId, teachers.id))
+    .leftJoin(bookReports, eq(bookReports.testRecordId, testRecords.id))
+    .where(eq(testRecords.studentNumber, studentNumber))
+    .orderBy(desc(testRecords.createdAt));
 }

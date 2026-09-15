@@ -87,7 +87,15 @@ export function BatchTestRecordsTable({ batchId, records }: { batchId: string; r
                 </TableCell>
                 <TableCell className="text-muted-foreground">{r.scanOrder}</TableCell>
                 <TableCell className="text-foreground">{r.bookTitle ?? r.quizCode ?? "—"}</TableCell>
-                <TableCell className="font-mono text-sm">{r.studentNumber ?? "—"}</TableCell>
+                <TableCell className="font-mono text-sm">
+                  {r.studentNumber ? (
+                    <Link href={`/students/${r.studentNumber}`} className="hover:underline">
+                      {r.studentNumber}
+                    </Link>
+                  ) : (
+                    "—"
+                  )}
+                </TableCell>
                 <TableCell>
                   {r.resolvedTeacherFirstName ? `${r.resolvedTeacherFirstName} ${r.resolvedTeacherLastName}` : "—"}
                 </TableCell>

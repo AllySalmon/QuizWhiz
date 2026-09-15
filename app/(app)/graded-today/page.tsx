@@ -34,7 +34,15 @@ export default async function GradedTodayPage() {
               {records.map((r) => (
                 <TableRow key={r.id}>
                   <TableCell className="text-foreground">{r.bookTitle ?? r.quizCode ?? "—"}</TableCell>
-                  <TableCell className="font-mono text-sm">{r.studentNumber ?? "—"}</TableCell>
+                  <TableCell className="font-mono text-sm">
+                    {r.studentNumber ? (
+                      <Link href={`/students/${r.studentNumber}`} className="hover:underline">
+                        {r.studentNumber}
+                      </Link>
+                    ) : (
+                      "—"
+                    )}
+                  </TableCell>
                   <TableCell>
                     {r.resolvedTeacherFirstName ? `${r.resolvedTeacherFirstName} ${r.resolvedTeacherLastName}` : "—"}
                   </TableCell>
