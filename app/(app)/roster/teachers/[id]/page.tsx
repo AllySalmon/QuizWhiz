@@ -48,7 +48,11 @@ export default async function TeacherDetailPage({ params }: { params: Promise<{ 
             <TableBody>
               {students.map((student) => (
                 <TableRow key={student.studentNumber}>
-                  <TableCell className="font-mono text-sm">{student.studentNumber}</TableCell>
+                  <TableCell className="font-mono text-sm">
+                    <Link href={`/students/${student.studentNumber}`} className="hover:underline">
+                      {student.studentNumber}
+                    </Link>
+                  </TableCell>
                   <TableCell>{GRADE_BAND_LABEL[student.gradeBand]}</TableCell>
                 </TableRow>
               ))}
