@@ -41,7 +41,7 @@ export default async function BookReportsPage() {
                     <TableRow>
                       <TableHead>Student #</TableHead>
                       <TableHead>Book</TableHead>
-                      <TableHead>Days outstanding</TableHead>
+                      <TableHead>Days Outstanding</TableHead>
                       <TableHead />
                     </TableRow>
                   </TableHeader>

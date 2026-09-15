@@ -131,10 +131,10 @@ async function Dashboard() {
       )}
 
       <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <StatCard label="Graded today" value={String(counts.gradedToday)} href="/graded-today" />
+        <StatCard label="Graded Today" value={String(counts.gradedToday)} href="/graded-today" />
         <StatCard label="Grading Review" value={String(counts.gradingReview)} href="/review/grading" />
         <StatCard label="Needs Review" value={String(counts.assignmentReview)} href="/review/assignment" />
-        <StatCard label="Outstanding reports" value={String(outstandingReports)} href="/book-reports" />
+        <StatCard label="Outstanding Reports" value={String(outstandingReports)} href="/book-reports" />
         <StatCard label="Possible Duplicates" value={String(possibleDuplicates)} href="/duplicates" />
       </div>
     </div>

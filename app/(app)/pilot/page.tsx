@@ -40,7 +40,7 @@ export default async function PilotPage() {
                   </TableCell>
                   <TableCell className="text-right">
                     <Link href={`/pilot/${run.id}`} className="text-sm font-medium text-primary hover:underline">
-                      View results
+                      View Results
                     </Link>
                   </TableCell>
                 </TableRow>
