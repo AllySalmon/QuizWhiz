@@ -35,7 +35,16 @@ export function AssignmentCorrectionForm({
         <Label htmlFor="teacherId">Teacher</Label>
         <Select name="teacherId" defaultValue={suggestedTeacherId} required>
           <SelectTrigger id="teacherId" className="w-full">
-            <SelectValue placeholder="Choose a teacher" />
+            {/* See StudentForm.tsx for why this needs an explicit label
+                lookup — Base UI's Select.Value can't resolve one from a
+                closed dropdown's unmounted items. */}
+            <SelectValue placeholder="Choose a teacher">
+              {(value: string | null) => {
+                if (!value) return "Choose a teacher";
+                const teacher = teachers.find((t) => t.id === value);
+                return teacher ? `${teacher.firstName} ${teacher.lastName}` : value;
+              }}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             {teachers.map((t) => (

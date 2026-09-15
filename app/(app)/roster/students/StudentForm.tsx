@@ -18,6 +18,8 @@ type Props = {
 
 const initialState: StudentFormState = { error: null };
 
+const GRADE_BAND_LABEL = { jr: "SSYRA Jr.", "3-5": "SSYRA 3–5" } as const;
+
 export function StudentForm({ mode, action, teachers, initial }: Props) {
   const [state, formAction, pending] = useActionState(action, initialState);
 
@@ -40,7 +42,17 @@ export function StudentForm({ mode, action, teachers, initial }: Props) {
           <Label htmlFor="teacherId">Teacher</Label>
           <Select name="teacherId" defaultValue={initial?.teacherId ?? undefined} required>
             <SelectTrigger id="teacherId" className="w-full">
-              <SelectValue placeholder="Choose a teacher" />
+              {/* Base UI's Select.Value only auto-resolves a label while its
+                  items are mounted (i.e. the popup is open) — closed, it
+                  falls back to the raw value. An explicit render function
+                  sidesteps that instead of showing the teacher's UUID. */}
+              <SelectValue placeholder="Choose a teacher">
+                {(value: string | null) => {
+                  if (!value) return "Choose a teacher";
+                  const teacher = teachers.find((t) => t.id === value);
+                  return teacher ? `${teacher.firstName} ${teacher.lastName}` : value;
+                }}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               {teachers.map((t) => (
@@ -56,7 +68,9 @@ export function StudentForm({ mode, action, teachers, initial }: Props) {
           <Label htmlFor="gradeBand">Grade band</Label>
           <Select name="gradeBand" defaultValue={initial?.gradeBand} required>
             <SelectTrigger id="gradeBand" className="w-full">
-              <SelectValue placeholder="Choose a grade band" />
+              <SelectValue placeholder="Choose a grade band">
+                {(value: "jr" | "3-5" | null) => (value ? GRADE_BAND_LABEL[value] : "Choose a grade band")}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="jr">SSYRA Jr.</SelectItem>

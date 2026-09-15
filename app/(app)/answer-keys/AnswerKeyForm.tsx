@@ -22,6 +22,8 @@ type Props = {
 
 const initialState: AnswerKeyFormState = { error: null };
 
+const GRADE_BAND_LABEL = { jr: "SSYRA Jr.", "3-5": "SSYRA 3–5" } as const;
+
 export function AnswerKeyForm({ mode, action, initial }: Props) {
   const [state, formAction, pending] = useActionState(action, initialState);
   const [questionCount, setQuestionCount] = useState(initial?.questions.length ?? 5);
@@ -50,7 +52,12 @@ export function AnswerKeyForm({ mode, action, initial }: Props) {
           <Label htmlFor="gradeBand">Grade band</Label>
           <Select name="gradeBand" defaultValue={initial?.gradeBand} required>
             <SelectTrigger id="gradeBand" className="w-full">
-              <SelectValue placeholder="Choose a grade band" />
+              {/* See StudentForm.tsx for why this needs an explicit label
+                  lookup — Base UI's Select.Value can't resolve one from a
+                  closed dropdown's unmounted items. */}
+              <SelectValue placeholder="Choose a grade band">
+                {(value: "jr" | "3-5" | null) => (value ? GRADE_BAND_LABEL[value] : "Choose a grade band")}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="jr">SSYRA Jr.</SelectItem>

@@ -38,7 +38,16 @@ export function ReassignAndDeleteForm({ teacherName, students, otherTeachers, ac
         <span className="text-sm text-muted-foreground">Assign all to</span>
         <Select onValueChange={(v) => assignAll(v as string)}>
           <SelectTrigger className="w-56">
-            <SelectValue placeholder="Choose a teacher" />
+            {/* See StudentForm.tsx for why this needs an explicit label
+                lookup — Base UI's Select.Value can't resolve one from a
+                closed dropdown's unmounted items. */}
+            <SelectValue placeholder="Choose a teacher">
+              {(value: string | null) => {
+                if (!value) return "Choose a teacher";
+                const teacher = otherTeachers.find((t) => t.id === value);
+                return teacher ? `${teacher.firstName} ${teacher.lastName}` : value;
+              }}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             {otherTeachers.map((t) => (
@@ -67,7 +76,13 @@ export function ReassignAndDeleteForm({ teacherName, students, otherTeachers, ac
               required
             >
               <SelectTrigger className="w-56">
-                <SelectValue placeholder="Choose a teacher" />
+                <SelectValue placeholder="Choose a teacher">
+                  {(value: string | null) => {
+                    if (!value) return "Choose a teacher";
+                    const teacher = otherTeachers.find((t) => t.id === value);
+                    return teacher ? `${teacher.firstName} ${teacher.lastName}` : value;
+                  }}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {otherTeachers.map((t) => (
