@@ -9,6 +9,7 @@ import {
   type AnswerChoice,
   type GradeBand,
 } from "@/lib/db/queries/answerKeys";
+import { reconcileTestsForNewAnswerKey } from "@/lib/db/queries/testRecords";
 import { parseAnswerKeyCsv, type AnswerKeyImportSummary } from "@/lib/csv/answerKeyImport";
 
 export type AnswerKeyFormState = { error: string | null };
@@ -83,6 +84,11 @@ export async function createAnswerKeyAction(
     throw err;
   }
 
+  // "If the answer key is updated, the test should process as normal" — any
+  // test stuck in Grading Review waiting on exactly this quiz code resolves
+  // itself now, without her also having to manually re-correct each one.
+  await reconcileTestsForNewAnswerKey(quizCode.trim(), questions);
+
   redirect("/answer-keys");
 }
 
@@ -140,6 +146,12 @@ export async function csvImportAnswerKeysAction(
   }
 
   await createManyAnswerKeys(result.applied);
+
+  // Same reconciliation as the one-at-a-time form — a bulk import can just
+  // as easily be the thing that finally supplies a previously-missing code.
+  for (const key of result.applied) {
+    await reconcileTestsForNewAnswerKey(key.quizCode, key.questions);
+  }
 
   return { error: null, summary: result };
 }

@@ -1,9 +1,9 @@
 import Link from "next/link";
-import { CheckCircle2, Circle } from "lucide-react";
+import { CheckCircle2, Circle, AlertTriangle } from "lucide-react";
 import { answerKeysExist } from "@/lib/db/queries/answerKeys";
 import { teachersExist } from "@/lib/db/queries/teachers";
 import { studentRosterExists } from "@/lib/db/queries/studentRoster";
-import { dashboardCounts } from "@/lib/db/queries/testRecords";
+import { dashboardCounts, countEscalatedGradingReview } from "@/lib/db/queries/testRecords";
 import { countOutstandingBookReports } from "@/lib/db/queries/bookReports";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -89,7 +89,11 @@ function SetupChecklist({
 }
 
 async function Dashboard() {
-  const [counts, outstandingReports] = await Promise.all([dashboardCounts(), countOutstandingBookReports()]);
+  const [counts, outstandingReports, escalatedGradingReview] = await Promise.all([
+    dashboardCounts(),
+    countOutstandingBookReports(),
+    countEscalatedGradingReview(),
+  ]);
 
   return (
     <div>
@@ -98,25 +102,36 @@ async function Dashboard() {
         <Button render={<Link href="/scan">Scan &amp; Upload</Link>} />
       </div>
 
+      {escalatedGradingReview > 0 && (
+        <div className="mt-4 flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-foreground">
+          <AlertTriangle className="size-4 shrink-0 text-destructive" aria-hidden />
+          <span>
+            {escalatedGradingReview} quiz code{escalatedGradingReview === 1 ? "" : "s"} in Grading
+            Review {escalatedGradingReview === 1 ? "has" : "have"} been unresolved for 2+ weeks —
+            add the missing answer key, or remove the scan.
+          </span>
+        </div>
+      )}
+
       <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <StatCard label="Graded today" value={String(counts.gradedToday)} />
-        <StatCard label="Grading Review" value={String(counts.gradingReview)} />
-        <StatCard label="Needs Review" value={String(counts.assignmentReview)} />
+        <StatCard label="Graded today" value={String(counts.gradedToday)} href="/graded-today" />
+        <StatCard label="Grading Review" value={String(counts.gradingReview)} href="/review/grading" />
+        <StatCard label="Needs Review" value={String(counts.assignmentReview)} href="/review/assignment" />
         <StatCard label="Outstanding reports" value={String(outstandingReports)} />
       </div>
 
       <p className="mt-6 text-sm text-muted-foreground">
         The full Reports screen and Book Report Tracker (Outstanding/Escalated list, the escalation
-        banner) are Milestone 2 — the counts above are real, but there&apos;s no dedicated view for
-        them yet beyond the review queues.
+        banner for outstanding reports) are Milestone 2 — the Outstanding Reports count above is
+        real, but there&apos;s no dedicated view for it yet.
       </p>
     </div>
   );
 }
 
-function StatCard({ label, value }: { label: string; value: string }) {
-  return (
-    <Card>
+function StatCard({ label, value, href }: { label: string; value: string; href?: string }) {
+  const card = (
+    <Card className={href ? "transition-colors hover:border-primary/40" : undefined}>
       <CardHeader>
         <CardTitle className="text-sm font-medium text-muted-foreground">{label}</CardTitle>
       </CardHeader>
@@ -124,5 +139,13 @@ function StatCard({ label, value }: { label: string; value: string }) {
         <span className="text-2xl font-semibold text-foreground">{value}</span>
       </CardContent>
     </Card>
+  );
+
+  return href ? (
+    <Link href={href} className="block">
+      {card}
+    </Link>
+  ) : (
+    card
   );
 }

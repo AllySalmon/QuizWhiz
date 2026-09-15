@@ -1,5 +1,5 @@
 import "server-only";
-import { eq, and, asc, sql, gte, inArray } from "drizzle-orm";
+import { eq, and, asc, sql, gte, inArray, ilike } from "drizzle-orm";
 import { getDb } from "../client";
 import { testRecords, answerKeys, teachers, bookReports } from "../schema";
 import { deleteScanImage } from "@/lib/supabase/storage";
@@ -78,19 +78,40 @@ export async function listTestRecordsForBatch(batchId: string) {
     .orderBy(asc(testRecords.scanOrder));
 }
 
+// A stuck "unrecognized quiz code" item is escalated after 14 days —
+// mirrors the book_reports escalation rule (Docs/5-Backend-Schema.md §2.7),
+// computed on read the same way, applied here per the user's request to
+// surface urgency on stuck Grading Review items without a new queue.
+const UNRECOGNIZED_QUIZ_CODE_ESCALATED = sql<boolean>`(
+  ${testRecords.flagReasons} @> '["unrecognized_quiz_code"]'::jsonb
+  AND ${testRecords.createdAt} < now() - interval '14 days'
+)`;
+
 export async function listGradingReviewQueue(batchId?: string) {
   const db = getDb();
   const where = batchId
     ? and(eq(testRecords.gradingStatus, "needs_grading_review"), eq(testRecords.batchId, batchId))
     : eq(testRecords.gradingStatus, "needs_grading_review");
 
-  return db
-    .select(queueSelection)
+  const rows = await db
+    .select({ ...queueSelection, isEscalated: UNRECOGNIZED_QUIZ_CODE_ESCALATED })
     .from(testRecords)
     .leftJoin(answerKeys, eq(testRecords.quizCode, answerKeys.quizCode))
     .leftJoin(teachers, eq(testRecords.resolvedTeacherId, teachers.id))
     .where(where)
     .orderBy(asc(testRecords.batchId), asc(testRecords.scanOrder));
+
+  // Escalated items surface first; otherwise preserve scan order.
+  return rows.sort((a, b) => Number(b.isEscalated) - Number(a.isEscalated));
+}
+
+export async function countEscalatedGradingReview() {
+  const db = getDb();
+  const [row] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(testRecords)
+    .where(and(eq(testRecords.gradingStatus, "needs_grading_review"), UNRECOGNIZED_QUIZ_CODE_ESCALATED));
+  return row?.count ?? 0;
 }
 
 export async function listAssignmentReviewQueue(batchId?: string) {
@@ -278,6 +299,52 @@ export async function deleteManyTestRecords(ids: string[]) {
   for (const id of ids) {
     await deleteTestRecord(id);
   }
+}
+
+// Every test graded since local midnight, across all batches — the Home
+// dashboard's "Graded Today" card links here. Not batch-scoped, since a
+// day can span multiple batches; read-only (no bulk delete — that stays
+// scoped to a single batch's own page, per the plan).
+export async function listGradedToday() {
+  const db = getDb();
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+
+  return db
+    .select(queueSelection)
+    .from(testRecords)
+    .leftJoin(answerKeys, eq(testRecords.quizCode, answerKeys.quizCode))
+    .leftJoin(teachers, eq(testRecords.resolvedTeacherId, teachers.id))
+    .where(gte(testRecords.createdAt, todayStart))
+    .orderBy(sql`${testRecords.createdAt} desc`);
+}
+
+// Called after a new Answer Key is created (app/(app)/answer-keys/actions.ts)
+// — makes "add the missing key and the test processes as normal" literally
+// true, instead of requiring her to also manually re-correct each stuck
+// test via the Grading Review screen. Reuses the exact scoring path
+// correctQuizCode already uses for a manual correction.
+export async function reconcileTestsForNewAnswerKey(
+  quizCode: string,
+  questions: { questionNumber: number; correctAnswer: AnswerChoice }[]
+) {
+  const db = getDb();
+  const stuck = await db
+    .select({ id: testRecords.id, quizCode: testRecords.quizCode })
+    .from(testRecords)
+    .where(
+      and(
+        ilike(testRecords.quizCode, quizCode.trim()),
+        eq(testRecords.gradingStatus, "needs_grading_review"),
+        sql`${testRecords.flagReasons} @> '["unrecognized_quiz_code"]'::jsonb`
+      )
+    );
+
+  for (const record of stuck) {
+    await correctQuizCode(record.id, record.quizCode!, questions);
+  }
+
+  return stuck.length;
 }
 
 export async function countsForBatch(batchId: string) {
