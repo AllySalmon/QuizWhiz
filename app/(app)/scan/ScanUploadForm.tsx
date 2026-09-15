@@ -1,17 +1,13 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Loader2, X, AlertTriangle } from "lucide-react";
 import { tryNormalizeImageForUpload } from "@/lib/media/normalizeImage";
-import { pdfFileToPageImages } from "@/lib/media/pdfToImages";
+import { useExpandableFileQueue } from "@/lib/media/useExpandableFileQueue";
 
 const CONCURRENCY = 3;
-
-function isPdf(file: File) {
-  return file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
-}
 
 type ItemStatus = "queued" | "uploading" | "done" | "failed";
 
@@ -31,47 +27,19 @@ function formatBatchLabel(date: Date) {
 
 export function ScanUploadForm() {
   const router = useRouter();
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [files, setFiles] = useState<File[]>([]);
+  const {
+    inputRef,
+    files,
+    hasPdfSource,
+    preparing,
+    error,
+    setError,
+    handleFilesSelected,
+    removeFile,
+  } = useExpandableFileQueue();
   const [items, setItems] = useState<QueueItem[]>([]);
   const [uploading, setUploading] = useState(false);
   const [batchId, setBatchId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [hasPdfSource, setHasPdfSource] = useState(false);
-  const [preparing, setPreparing] = useState<{ fileName: string; index: number; total: number } | null>(null);
-
-  async function handleFilesSelected(fileList: FileList | null) {
-    if (!fileList) return;
-    const picked = Array.from(fileList);
-    if (inputRef.current) inputRef.current.value = "";
-
-    setError(null);
-    const expanded: File[] = [];
-
-    for (let i = 0; i < picked.length; i++) {
-      const file = picked[i];
-      if (!isPdf(file)) {
-        expanded.push(file);
-        continue;
-      }
-
-      setHasPdfSource(true);
-      setPreparing({ fileName: file.name, index: i + 1, total: picked.length });
-      try {
-        const pages = await pdfFileToPageImages(file);
-        expanded.push(...pages);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : `Couldn't read "${file.name}".`);
-      }
-    }
-
-    setPreparing(null);
-    setFiles((prev) => [...prev, ...expanded]);
-  }
-
-  function removeFile(index: number) {
-    setFiles((prev) => prev.filter((_, i) => i !== index));
-  }
 
   async function startUpload() {
     if (files.length === 0) return;

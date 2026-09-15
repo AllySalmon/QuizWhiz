@@ -120,6 +120,15 @@ export async function listQuizCodes() {
   return rows.map((r) => r.quizCode);
 }
 
+// For the accuracy pilot's ground-truth CSV validation (lib/csv/groundTruthImport.ts)
+// — each row's required answer columns depend on its own quiz code's real
+// question count, not a count assumed from the CSV's header alone.
+export async function listQuizCodeQuestionCounts() {
+  const db = getDb();
+  const rows = await db.select({ quizCode: answerKeys.quizCode, questionCount: answerKeys.questionCount }).from(answerKeys);
+  return rows;
+}
+
 // Used by the CSV import (lib/csv/answerKeyImport.ts) after it has already
 // filtered out invalid/duplicate rows. Each key gets its own transaction via
 // createAnswerKey — fine at CSV-batch scale, no need for one giant transaction.
