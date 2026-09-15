@@ -1,8 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getTestRecord } from "@/lib/db/queries/testRecords";
+import { getTestRecord, getTestRecordScanImageUrl } from "@/lib/db/queries/testRecords";
 import { getAnswerKeyByQuizCode } from "@/lib/db/queries/answerKeys";
-import { getSignedScanImageUrl } from "@/lib/supabase/storage";
 import { ReviewTabs } from "../../ReviewTabs";
 import { correctQuizCodeAction, correctAnswersAction } from "../actions";
 import { QuizCodeCorrectionForm } from "./QuizCodeCorrectionForm";
@@ -32,7 +31,7 @@ export default async function GradingReviewDetailPage({
   const flagReasons = (record.flagReasons ?? []) as string[];
   const isUnrecognizedQuizCode = flagReasons.includes("unrecognized_quiz_code");
 
-  const imageUrl = record.scanImageRef ? await getSignedScanImageUrl(record.scanImageRef) : null;
+  const imageUrl = await getTestRecordScanImageUrl(id);
 
   return (
     <div>

@@ -18,7 +18,7 @@ type DuplicateRow = {
   passed: boolean | null;
   gradingStatus: "clean" | "needs_grading_review" | "resolved";
   assignmentStatus: "clean" | "needs_assignment_review" | "resolved";
-  createdAt: Date;
+  createdAt: string;
 };
 
 type DuplicateGroup = {

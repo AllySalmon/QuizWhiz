@@ -1,7 +1,7 @@
 import "server-only";
-import { and, asc, eq, ilike, isNotNull, or } from "drizzle-orm";
+import { and, asc, eq, ilike, or } from "drizzle-orm";
 import { getDb } from "../client";
-import { testRecords, teachers } from "../schema";
+import { teachers } from "../schema";
 import { listStudents } from "./studentRoster";
 import { createClient } from "@/lib/supabase/server";
 
@@ -15,20 +15,34 @@ const RESULT_LIMIT = 10;
 // already ilike-matches student_number) with distinct student numbers that
 // only exist in test_records — a historical/unrostered number should still
 // be findable, since /students/[studentNumber] works for those too.
+//
+// The test_records half goes through the Supabase client, not Drizzle —
+// same reason as searchAnswerKeys()'s rewrite in this file: RLS has no
+// effect on the Drizzle connection, so a plain Drizzle select here would be
+// an immediate cross-tenant leak once test_records has RLS (found during
+// review of the test_records/book_reports conversion plan — this function
+// wasn't in that pass's original scope, but is the same bug in the same
+// shape). student_roster isn't tenant-scoped yet, so listStudents()'s half
+// stays on Drizzle unchanged for now.
 export async function searchStudents(q: string) {
-  const db = getDb();
   const rostered = await listStudents(q);
   const rosteredNumbers = new Set(rostered.map((s) => s.studentNumber));
 
-  const unrosteredRows = await db
-    .selectDistinct({ studentNumber: testRecords.studentNumber })
-    .from(testRecords)
-    .where(and(isNotNull(testRecords.studentNumber), ilike(testRecords.studentNumber, `%${q}%`)))
-    .limit(RESULT_LIMIT);
+  const supabase = await createClient();
+  // No DISTINCT in a PostgREST select — dedupe in JS instead, over a wider
+  // raw fetch than RESULT_LIMIT so a student with several tests doesn't
+  // crowd out other distinct matches before dedup runs.
+  const { data, error } = await supabase
+    .from("test_records")
+    .select("studentNumber:student_number")
+    .not("student_number", "is", null)
+    .ilike("student_number", `%${q}%`)
+    .order("student_number", { ascending: true })
+    .limit(50)
+    .returns<{ studentNumber: string }[]>();
+  if (error) throw error;
 
-  const unrostered = unrosteredRows
-    .map((r) => r.studentNumber!)
-    .filter((n) => !rosteredNumbers.has(n));
+  const unrostered = [...new Set((data ?? []).map((r) => r.studentNumber))].filter((n) => !rosteredNumbers.has(n));
 
   return [
     ...rostered.slice(0, RESULT_LIMIT).map((s) => ({

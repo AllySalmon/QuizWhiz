@@ -94,8 +94,11 @@ export const answerKeyQuestions = pgTable(
 );
 
 // 2.5 batches — one row per upload session, not a fixed weekly cycle
+// user_id: same treatment as answerKeys.userId above — added nullable here on
+// purpose, NOT NULL/FK/default/RLS applied by hand in supabase/test-records-rls.sql.
 export const batches = pgTable("batches", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: uuid("user_id"),
   label: text("label").notNull(), // auto-generated, e.g. "Tue 9/16, 10:04am"
   sourceType: sourceTypeEnum("source_type").notNull(),
   itemCount: integer("item_count").notNull(),
@@ -103,10 +106,12 @@ export const batches = pgTable("batches", {
 });
 
 // 2.6 test_records — the core grading table, one row per scanned test
+// user_id: same treatment as answerKeys.userId above.
 export const testRecords = pgTable(
   "test_records",
   {
     id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    userId: uuid("user_id"),
     batchId: uuid("batch_id")
       .notNull()
       .references(() => batches.id),
@@ -152,10 +157,12 @@ export const testRecords = pgTable(
 );
 
 // 2.7 book_reports — auto-created whenever a test_records row has passed = false
+// user_id: same treatment as answerKeys.userId above.
 export const bookReports = pgTable(
   "book_reports",
   {
     id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    userId: uuid("user_id"),
     testRecordId: uuid("test_record_id")
       .notNull()
       .references(() => testRecords.id),
@@ -176,8 +183,11 @@ export const bookReports = pgTable(
 // managed by Supabase Auth (auth.users), not a hand-rolled table.
 
 // 2.9 audit_log — cheap insurance since roster edits can retroactively affect history
+// user_id: same treatment as answerKeys.userId above — denormalized so a
+// correction's audit trail is tenant-scoped too, not just the record itself.
 export const auditLog = pgTable("audit_log", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: uuid("user_id"),
   action: text("action").notNull(), // e.g. teacher_renamed, teacher_deleted_reassigned
   entityType: text("entity_type").notNull(), // e.g. teacher, student_roster, book_report
   entityId: text("entity_id").notNull(),

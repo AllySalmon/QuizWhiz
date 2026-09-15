@@ -56,7 +56,7 @@ export function ReportDocument({
                 <Text style={[styles.colResult, row.passed === false ? styles.fail : undefined]}>
                   {row.passed === null ? "—" : row.passed ? "Pass" : "Fail"}
                 </Text>
-                <Text style={styles.colDate}>{row.createdAt.toISOString().slice(0, 10)}</Text>
+                <Text style={styles.colDate}>{new Date(row.createdAt).toISOString().slice(0, 10)}</Text>
               </View>
             ))}
           </View>

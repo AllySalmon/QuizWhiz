@@ -82,7 +82,7 @@ export default async function BatchReportPage({ params }: { params: Promise<{ id
                           )}
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">
-                          {row.createdAt.toISOString().slice(0, 10)}
+                          {new Date(row.createdAt).toISOString().slice(0, 10)}
                         </TableCell>
                       </TableRow>
                     ))}

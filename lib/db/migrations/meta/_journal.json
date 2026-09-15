@@ -29,6 +29,13 @@
       "when": 1789481818260,
       "tag": "0003_clammy_roulette",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1789490009208,
+      "tag": "0004_lame_tyrannus",
+      "breakpoints": true
     }
   ]
 }

@@ -1,27 +1,53 @@
 import "server-only";
-import { eq, desc } from "drizzle-orm";
-import { getDb } from "../client";
-import { batches, testRecords } from "../schema";
+import { createClient } from "@/lib/supabase/server";
 import { deleteTestRecord } from "./testRecords";
 
+// Phase 2 of the RLS conversion — same reasoning as testRecords.ts/answerKeys.ts.
+
+type BatchRow = {
+  id: string;
+  label: string;
+  sourceType: "photo" | "pdf";
+  itemCount: number;
+  createdAt: string;
+};
+
+const BATCH_COLUMNS = "id, label, sourceType:source_type, itemCount:item_count, createdAt:created_at";
+
 export async function createBatch(input: { label: string; sourceType: "photo" | "pdf"; itemCount: number }) {
-  const db = getDb();
-  const [batch] = await db.insert(batches).values(input).returning();
-  return batch;
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("batches")
+    .insert({ label: input.label, source_type: input.sourceType, item_count: input.itemCount })
+    .select(BATCH_COLUMNS)
+    .single<BatchRow>();
+  if (error) throw error;
+  return data;
 }
 
 export async function getBatch(id: string) {
-  const db = getDb();
-  const [batch] = await db.select().from(batches).where(eq(batches.id, id));
-  return batch ?? null;
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("batches")
+    .select(BATCH_COLUMNS)
+    .eq("id", id)
+    .maybeSingle<BatchRow>();
+  if (error) throw error;
+  return data ?? null;
 }
 
 // Every batch ever uploaded, most recent first — the "where did my scans
 // go" list. Full per-teacher grouping/export is Milestone 2 (Reports);
 // this is just "find a past batch again."
 export async function listBatches() {
-  const db = getDb();
-  return db.select().from(batches).orderBy(desc(batches.createdAt));
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("batches")
+    .select(BATCH_COLUMNS)
+    .order("created_at", { ascending: false })
+    .returns<BatchRow[]>();
+  if (error) throw error;
+  return data ?? [];
 }
 
 // Deletes every test in the batch (each via deleteTestRecord, so book
@@ -31,12 +57,18 @@ export async function listBatches() {
 // transaction anyway; each test's cleanup is independent and one failing
 // doesn't stop the others.
 export async function deleteBatch(id: string) {
-  const db = getDb();
-  const records = await db.select({ id: testRecords.id }).from(testRecords).where(eq(testRecords.batchId, id));
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("test_records")
+    .select("id")
+    .eq("batch_id", id)
+    .returns<{ id: string }[]>();
+  if (error) throw error;
 
-  for (const record of records) {
+  for (const record of data ?? []) {
     await deleteTestRecord(record.id);
   }
 
-  await db.delete(batches).where(eq(batches.id, id));
+  const { error: deleteError } = await supabase.from("batches").delete().eq("id", id);
+  if (deleteError) throw deleteError;
 }

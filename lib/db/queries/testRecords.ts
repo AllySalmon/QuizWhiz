@@ -1,10 +1,31 @@
 import "server-only";
-import { eq, and, asc, desc, sql, gte, inArray, ilike, ne } from "drizzle-orm";
-import { getDb } from "../client";
-import { testRecords, answerKeys, teachers, bookReports, auditLog } from "../schema";
-import { deleteScanImage } from "@/lib/supabase/storage";
-import { createBookReport, deleteBookReportByTestRecordId, getBookReportByTestRecordId } from "./bookReports";
+import { createClient } from "@/lib/supabase/server";
+import { deleteScanImage, getSignedScanImageUrl } from "@/lib/supabase/storage";
+import { deleteBookReportByTestRecordId } from "./bookReports";
 import type { AnswerChoice } from "./answerKeys";
+
+// Phase 2 of the RLS conversion (see the approved plan): this file queries
+// through the Supabase client (PostgREST), not Drizzle — same reasoning as
+// answerKeys.ts (rolbypassrls=true on the Drizzle connection). The three
+// multi-table writes below (create, grading correction, assignment
+// correction) call Postgres RPCs (supabase/test-records-functions.sql)
+// instead of db.transaction()/sequential inserts, since supabase-js has no
+// multi-statement transaction primitive and an orphaned test_records/
+// book_reports pair is a silent, not-harmless failure (unlike the
+// answer_keys PoC's orphaned-key tradeoff).
+//
+// createdAt/reviewedAt come back as ISO strings, not Date objects (see
+// answerKeys.ts for the same note) — typed as `string` below.
+//
+// teachers(...) below is a real embedded-resource join (resolved_teacher_id
+// references teachers.id) — PostgREST can express that directly. quiz_code
+// -> answer_keys.quiz_code is deliberately NOT a foreign key (a code can
+// legitimately match no key), so it can't be embedded the same way; book
+// titles are attached via a second query + JS merge (attachBookTitles),
+// same "merge in JS instead of fighting PostgREST's query surface" call
+// already made for searchAnswerKeys(). The POSSIBLE_DUPLICATE/escalation
+// flags that used to be computed-on-read SQL are JS-computed the same way —
+// see attachDuplicateFlag and isEscalated below.
 
 export type NewTestRecord = {
   batchId: string;
@@ -22,135 +43,236 @@ export type NewTestRecord = {
   scanImageRef: string | null;
 };
 
-export async function createTestRecord(input: NewTestRecord) {
-  const db = getDb();
-  const [record] = await db
-    .insert(testRecords)
-    .values({ ...input, scorePercent: input.scorePercent?.toString() ?? null })
-    .returning();
-  return record;
-}
-
-export async function getTestRecord(id: string) {
-  const db = getDb();
-  const [record] = await db.select().from(testRecords).where(eq(testRecords.id, id));
-  return record ?? null;
-}
-
-export async function getTestRecordsByIds(ids: string[]) {
-  if (ids.length === 0) return [];
-  const db = getDb();
-  return db.select().from(testRecords).where(inArray(testRecords.id, ids)).orderBy(asc(testRecords.scanOrder));
-}
-
-// Non-blocking duplicate warning: another test_records row exists with the
-// same student number + quiz code. Computed on read (not stored) so it
-// self-corrects the moment either record is deleted — same treatment as
-// the escalation flag below. Doesn't touch gradingStatus/assignmentStatus;
-// a would-be-clean test stays clean, just carries this as extra visible
-// context wherever it's listed. A re-scan can be a genuine retake, so this
-// is advisory, not routed into a review queue.
-// Table-qualified on purpose (not ${testRecords.studentNumber}-style
-// interpolation): inside a correlated subquery, Drizzle renders those
-// unqualified when there's no join in the outer query, which is ambiguous
-// against the subquery's own same-named columns and gets resolved to the
-// wrong (inner) row — confirmed live, see the fix commit for the repro.
-const POSSIBLE_DUPLICATE = sql<boolean>`(
-  test_records.student_number is not null
-  AND test_records.quiz_code is not null
-  AND EXISTS (
-    SELECT 1 FROM test_records dup
-    WHERE dup.student_number = test_records.student_number
-      AND dup.quiz_code = test_records.quiz_code
-      AND dup.id <> test_records.id
-  )
-)`;
-
-const queueSelection = {
-  id: testRecords.id,
-  batchId: testRecords.batchId,
-  scanOrder: testRecords.scanOrder,
-  quizCode: testRecords.quizCode,
-  bookTitle: answerKeys.bookTitle,
-  studentNumber: testRecords.studentNumber,
-  ocrTeacherLastName: testRecords.ocrTeacherLastName,
-  resolvedTeacherFirstName: teachers.firstName,
-  resolvedTeacherLastName: teachers.lastName,
-  answersJson: testRecords.answersJson,
-  scorePercent: testRecords.scorePercent,
-  passed: testRecords.passed,
-  gradingStatus: testRecords.gradingStatus,
-  assignmentStatus: testRecords.assignmentStatus,
-  flagReasons: testRecords.flagReasons,
-  scanImageRef: testRecords.scanImageRef,
-  createdAt: testRecords.createdAt,
-  isDuplicate: POSSIBLE_DUPLICATE,
+type TestRecordRow = {
+  id: string;
+  batchId: string;
+  scanOrder: number;
+  quizCode: string | null;
+  studentNumber: string | null;
+  ocrTeacherLastName: string | null;
+  resolvedTeacherId: string | null;
+  answersJson: Record<string, string | null>;
+  scorePercent: string | null;
+  passed: boolean | null;
+  gradingStatus: "clean" | "needs_grading_review" | "resolved";
+  assignmentStatus: "clean" | "needs_assignment_review" | "resolved";
+  flagReasons: string[];
+  scanImageRef: string | null;
+  reviewedAt: string | null;
+  createdAt: string;
 };
+
+const RECORD_COLUMNS =
+  "id, batchId:batch_id, scanOrder:scan_order, quizCode:quiz_code, studentNumber:student_number, ocrTeacherLastName:ocr_teacher_last_name, resolvedTeacherId:resolved_teacher_id, answersJson:answers_json, scorePercent:score_percent, passed, gradingStatus:grading_status, assignmentStatus:assignment_status, flagReasons:flag_reasons, scanImageRef:scan_image_ref, reviewedAt:reviewed_at, createdAt:created_at";
+
+type Teacher = { firstName: string; lastName: string } | null;
+type RawQueueRow = TestRecordRow & { teachers: Teacher };
+const QUEUE_COLUMNS = `${RECORD_COLUMNS}, teachers(firstName:first_name, lastName:last_name)`;
+
+// Flattens the teachers(...) embed into the flat resolvedTeacherFirstName/
+// resolvedTeacherLastName fields the old Drizzle queueSelection returned —
+// every consumer of these queue-shaped rows expects those flat fields, not
+// a nested object.
+function flattenTeacher(row: RawQueueRow) {
+  const { teachers, ...rest } = row;
+  return { ...rest, resolvedTeacherFirstName: teachers?.firstName ?? null, resolvedTeacherLastName: teachers?.lastName ?? null };
+}
+
+type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
+
+// Attaches bookTitle from answer_keys, matched by quiz_code (not a real FK —
+// see file header). A plain .in() query, not a correlated one, so this is
+// safe to batch across however many distinct codes the caller's rows have.
+async function attachBookTitles<T extends { quizCode: string | null }>(
+  supabase: SupabaseClient,
+  rows: T[]
+): Promise<(T & { bookTitle: string | null })[]> {
+  const codes = [...new Set(rows.map((r) => r.quizCode).filter((c): c is string => c !== null))];
+  if (codes.length === 0) return rows.map((r) => ({ ...r, bookTitle: null }));
+
+  const { data, error } = await supabase
+    .from("answer_keys")
+    .select("quizCode:quiz_code, bookTitle:book_title")
+    .in("quiz_code", codes)
+    .returns<{ quizCode: string; bookTitle: string }[]>();
+  if (error) throw error;
+
+  const titleByCode = new Map((data ?? []).map((k) => [k.quizCode, k.bookTitle]));
+  return rows.map((r) => ({ ...r, bookTitle: r.quizCode ? (titleByCode.get(r.quizCode) ?? null) : null }));
+}
+
+// Attaches isDuplicate: another of the caller's own test_records shares the
+// same (studentNumber, quizCode). Needs visibility across the caller's
+// whole table (RLS-scoped to them already), not just whatever this query's
+// own filter narrowed to — e.g. listGradingReviewQueue's flag has to know
+// about a match sitting in a different status. PostgREST can't express the
+// correlated self-join EXISTS the old Drizzle version used, so this fetches
+// the (studentNumber, quizCode) pairs once and counts in JS instead.
+async function attachDuplicateFlag<
+  T extends { id: string; studentNumber: string | null; quizCode: string | null },
+>(supabase: SupabaseClient, rows: T[]): Promise<(T & { isDuplicate: boolean })[]> {
+  const { data, error } = await supabase
+    .from("test_records")
+    .select("studentNumber:student_number, quizCode:quiz_code")
+    .not("student_number", "is", null)
+    .not("quiz_code", "is", null)
+    .returns<{ studentNumber: string; quizCode: string }[]>();
+  if (error) throw error;
+
+  const counts = new Map<string, number>();
+  for (const r of data ?? []) {
+    const key = `${r.studentNumber}|${r.quizCode}`;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+
+  return rows.map((r) => ({
+    ...r,
+    isDuplicate:
+      r.studentNumber !== null && r.quizCode !== null && (counts.get(`${r.studentNumber}|${r.quizCode}`) ?? 0) > 1,
+  }));
+}
+
+const FOURTEEN_DAYS_MS = 14 * 24 * 60 * 60 * 1000;
+
+// Mirrors UNRECOGNIZED_QUIZ_CODE_ESCALATED's 14-day rule (Docs/5-Backend-Schema.md §2.7).
+function isGradingReviewEscalated(row: { flagReasons: string[]; createdAt: string }) {
+  return row.flagReasons.includes("unrecognized_quiz_code") && Date.now() - new Date(row.createdAt).getTime() > FOURTEEN_DAYS_MS;
+}
+
+// Atomic via the create_graded_test_record RPC (supabase/test-records-functions.sql):
+// inserts the test record and, if it failed, its book report, in one
+// Postgres transaction. Used only by the real grading pipeline
+// (app/api/grading/process-image/route.ts), which used to do these as two
+// separate Drizzle calls with no transaction and no cleanup on failure —
+// this closes that gap, not just preserves it.
+export async function createTestRecord(input: NewTestRecord) {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .rpc("create_graded_test_record", {
+      p_batch_id: input.batchId,
+      p_scan_order: input.scanOrder,
+      p_quiz_code: input.quizCode,
+      p_student_number: input.studentNumber,
+      p_ocr_teacher_last_name: input.ocrTeacherLastName,
+      p_resolved_teacher_id: input.resolvedTeacherId,
+      p_answers_json: input.answersJson,
+      p_score_percent: input.scorePercent,
+      p_passed: input.passed,
+      p_grading_status: input.gradingStatus,
+      p_assignment_status: input.assignmentStatus,
+      p_flag_reasons: input.flagReasons,
+      p_scan_image_ref: input.scanImageRef,
+    })
+    .single<TestRecordRow>();
+  if (error) throw error;
+  return data;
+}
 
 // Every test in a batch, regardless of status — the "what actually
 // happened to my scans" list. The review queues only ever show what's
 // currently outstanding, so once everything's resolved they go empty and
 // there's otherwise nowhere to see the results at all.
 export async function listTestRecordsForBatch(batchId: string) {
-  const db = getDb();
-  return db
-    .select(queueSelection)
-    .from(testRecords)
-    .leftJoin(answerKeys, eq(testRecords.quizCode, answerKeys.quizCode))
-    .leftJoin(teachers, eq(testRecords.resolvedTeacherId, teachers.id))
-    .where(eq(testRecords.batchId, batchId))
-    .orderBy(asc(testRecords.scanOrder));
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("test_records")
+    .select(QUEUE_COLUMNS)
+    .eq("batch_id", batchId)
+    .order("scan_order", { ascending: true })
+    .returns<RawQueueRow[]>();
+  if (error) throw error;
+
+  const rows = (data ?? []).map(flattenTeacher);
+  return attachDuplicateFlag(supabase, await attachBookTitles(supabase, rows));
 }
 
-// A stuck "unrecognized quiz code" item is escalated after 14 days —
-// mirrors the book_reports escalation rule (Docs/5-Backend-Schema.md §2.7),
-// computed on read the same way, applied here per the user's request to
-// surface urgency on stuck Grading Review items without a new queue.
-const UNRECOGNIZED_QUIZ_CODE_ESCALATED = sql<boolean>`(
-  ${testRecords.flagReasons} @> '["unrecognized_quiz_code"]'::jsonb
-  AND ${testRecords.createdAt} < now() - interval '14 days'
-)`;
+export async function getTestRecord(id: string) {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("test_records")
+    .select(RECORD_COLUMNS)
+    .eq("id", id)
+    .maybeSingle<TestRecordRow>();
+  if (error) throw error;
+  return data ?? null;
+}
+
+// The storage isolation fix: lib/supabase/storage.ts's getSignedScanImageUrl
+// takes a raw path and has no ownership check of its own (it has to use the
+// admin client — the bucket has no policies granting the browser client any
+// access at all). Routing every real call through getTestRecord() first
+// makes the check structural — RLS means getTestRecord() returns null for a
+// scan the caller doesn't own, so no signed URL is ever generated for it —
+// rather than relying on every call site to remember to check. Pilot
+// tooling's own scan images (comparison_run_items) intentionally bypass
+// this — that table isn't part of the tenant model at all (see schema.ts).
+export async function getTestRecordScanImageUrl(id: string) {
+  const record = await getTestRecord(id);
+  if (!record?.scanImageRef) return null;
+  return getSignedScanImageUrl(record.scanImageRef);
+}
+
+export async function getTestRecordsByIds(ids: string[]) {
+  if (ids.length === 0) return [];
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("test_records")
+    .select(RECORD_COLUMNS)
+    .in("id", ids)
+    .order("scan_order", { ascending: true })
+    .returns<TestRecordRow[]>();
+  if (error) throw error;
+  return data ?? [];
+}
 
 export async function listGradingReviewQueue(batchId?: string) {
-  const db = getDb();
-  const where = batchId
-    ? and(eq(testRecords.gradingStatus, "needs_grading_review"), eq(testRecords.batchId, batchId))
-    : eq(testRecords.gradingStatus, "needs_grading_review");
+  const supabase = await createClient();
+  let query = supabase
+    .from("test_records")
+    .select(QUEUE_COLUMNS)
+    .eq("grading_status", "needs_grading_review")
+    .order("batch_id", { ascending: true })
+    .order("scan_order", { ascending: true });
+  if (batchId) query = query.eq("batch_id", batchId);
 
-  const rows = await db
-    .select({ ...queueSelection, isEscalated: UNRECOGNIZED_QUIZ_CODE_ESCALATED })
-    .from(testRecords)
-    .leftJoin(answerKeys, eq(testRecords.quizCode, answerKeys.quizCode))
-    .leftJoin(teachers, eq(testRecords.resolvedTeacherId, teachers.id))
-    .where(where)
-    .orderBy(asc(testRecords.batchId), asc(testRecords.scanOrder));
+  const { data, error } = await query.returns<RawQueueRow[]>();
+  if (error) throw error;
+
+  const flattened = (data ?? []).map(flattenTeacher);
+  const withTitles = await attachBookTitles(supabase, flattened);
+  const withDuplicates = await attachDuplicateFlag(supabase, withTitles);
+  const rows = withDuplicates.map((r) => ({ ...r, isEscalated: isGradingReviewEscalated(r) }));
 
   // Escalated items surface first; otherwise preserve scan order.
   return rows.sort((a, b) => Number(b.isEscalated) - Number(a.isEscalated));
 }
 
 export async function countEscalatedGradingReview() {
-  const db = getDb();
-  const [row] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(testRecords)
-    .where(and(eq(testRecords.gradingStatus, "needs_grading_review"), UNRECOGNIZED_QUIZ_CODE_ESCALATED));
-  return row?.count ?? 0;
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("test_records")
+    .select("flagReasons:flag_reasons, createdAt:created_at")
+    .eq("grading_status", "needs_grading_review")
+    .returns<{ flagReasons: string[]; createdAt: string }[]>();
+  if (error) throw error;
+  return (data ?? []).filter(isGradingReviewEscalated).length;
 }
 
 export async function listAssignmentReviewQueue(batchId?: string) {
-  const db = getDb();
-  const where = batchId
-    ? and(eq(testRecords.assignmentStatus, "needs_assignment_review"), eq(testRecords.batchId, batchId))
-    : eq(testRecords.assignmentStatus, "needs_assignment_review");
+  const supabase = await createClient();
+  let query = supabase
+    .from("test_records")
+    .select(QUEUE_COLUMNS)
+    .eq("assignment_status", "needs_assignment_review")
+    .order("batch_id", { ascending: true })
+    .order("scan_order", { ascending: true });
+  if (batchId) query = query.eq("batch_id", batchId);
 
-  return db
-    .select(queueSelection)
-    .from(testRecords)
-    .leftJoin(answerKeys, eq(testRecords.quizCode, answerKeys.quizCode))
-    .leftJoin(teachers, eq(testRecords.resolvedTeacherId, teachers.id))
-    .where(where)
-    .orderBy(asc(testRecords.batchId), asc(testRecords.scanOrder));
+  const { data, error } = await query.returns<RawQueueRow[]>();
+  if (error) throw error;
+
+  const rows = (data ?? []).map(flattenTeacher);
+  return attachDuplicateFlag(supabase, await attachBookTitles(supabase, rows));
 }
 
 // Grading Review, case 1: quiz code didn't match any key. She corrects the
@@ -161,18 +283,17 @@ export async function correctQuizCode(
   newQuizCode: string,
   matchedQuestions: { questionNumber: number; correctAnswer: AnswerChoice }[] | null
 ) {
-  const db = getDb();
-  const record = await getTestRecord(id);
-  if (!record) throw new Error("Test record not found.");
-
   if (matchedQuestions === null) {
     // Still no match — leave it in the queue with the corrected code saved.
-    const [updated] = await db
-      .update(testRecords)
-      .set({ quizCode: newQuizCode })
-      .where(eq(testRecords.id, id))
-      .returning();
-    return updated;
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("test_records")
+      .update({ quiz_code: newQuizCode })
+      .eq("id", id)
+      .select(RECORD_COLUMNS)
+      .single<TestRecordRow>();
+    if (error) throw error;
+    return data;
   }
 
   return scoreAgainstKey(id, matchedQuestions, { quizCode: newQuizCode });
@@ -191,6 +312,12 @@ export async function correctAnswers(
   });
 }
 
+// Atomic via the sync_test_record_grading RPC (supabase/test-records-functions.sql):
+// updates the test record and reconciles its book report (create/delete) in
+// one Postgres transaction, instead of the two separate calls this used to
+// be — a scored failing test silently missing its book report is exactly
+// the "not acceptable" failure class flagged when this table's conversion
+// was planned.
 async function scoreAgainstKey(
   id: string,
   matchedQuestions: { questionNumber: number; correctAnswer: AnswerChoice }[],
@@ -199,7 +326,6 @@ async function scoreAgainstKey(
     answersOverride?: { questionNumber: number; selected: AnswerChoice }[];
   }
 ) {
-  const db = getDb();
   const record = await getTestRecord(id);
   if (!record) throw new Error("Test record not found.");
 
@@ -221,99 +347,49 @@ async function scoreAgainstKey(
     (f) => !f.startsWith("unclear_answer_q") && f !== "unrecognized_quiz_code"
   );
 
-  const [updated] = await db
-    .update(testRecords)
-    .set({
-      quizCode: opts.quizCode ?? record.quizCode,
-      answersJson: answers,
-      scorePercent: scorePercent.toString(),
-      passed,
-      gradingStatus: "resolved",
-      flagReasons: remainingFlags,
-      reviewedAt: new Date(),
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .rpc("sync_test_record_grading", {
+      p_id: id,
+      p_quiz_code: opts.quizCode ?? record.quizCode,
+      p_answers_json: answers,
+      p_score_percent: scorePercent,
+      p_passed: passed,
+      p_grading_status: "resolved",
+      p_flag_reasons: remainingFlags,
     })
-    .where(eq(testRecords.id, id))
-    .returning();
+    .single<TestRecordRow>();
+  if (error) throw error;
 
-  await syncBookReportOnScoreChange(updated);
   await maybeDeleteScanImage(id);
-  return updated;
-}
-
-// A correction can flip pass/fail — the book report has to follow
-// (Docs/1-PRD.md §5.7 ties it strictly to the current passed state).
-async function syncBookReportOnScoreChange(record: typeof testRecords.$inferSelect) {
-  const existing = await getBookReportByTestRecordId(record.id);
-  if (record.passed === false && !existing) {
-    await createBookReport({
-      testRecordId: record.id,
-      studentNumber: record.studentNumber ?? "",
-      teacherId: record.resolvedTeacherId,
-      dueDate: new Date().toISOString().slice(0, 10),
-    });
-  } else if (record.passed !== false && existing) {
-    await deleteBookReportByTestRecordId(record.id);
-  }
+  return data;
 }
 
 // Also reachable after assignmentStatus is already "resolved" — a genuine
 // correction, not just the first-time resolution (review/assignment/[id]/page.tsx
-// no longer gates the form on status). Logs to audit_log either way, since a
-// record of "resolved to X" is useful on its own, not just re-corrections —
-// same insert-in-the-transaction pattern as reassignAndDeleteTeacher
-// (lib/db/queries/teachers.ts), the only other audit_log writer today.
-export async function correctAssignment(
-  id: string,
-  input: { studentNumber: string; teacherId: string }
-) {
-  const db = getDb();
-  const existing = await getTestRecord(id);
-  if (!existing) throw new Error("Test record not found.");
-
-  const updated = await db.transaction(async (tx) => {
-    const [row] = await tx
-      .update(testRecords)
-      .set({
-        studentNumber: input.studentNumber,
-        resolvedTeacherId: input.teacherId,
-        assignmentStatus: "resolved",
-        reviewedAt: new Date(),
-      })
-      .where(eq(testRecords.id, id))
-      .returning();
-
-    await tx.insert(auditLog).values({
-      action: "test_record_assignment_corrected",
-      entityType: "test_record",
-      entityId: id,
-      details: {
-        previousStudentNumber: existing.studentNumber,
-        newStudentNumber: input.studentNumber,
-        previousTeacherId: existing.resolvedTeacherId,
-        newTeacherId: input.teacherId,
-        wasAlreadyResolved: existing.assignmentStatus === "resolved",
-      },
-    });
-
-    return row;
-  });
-
-  // The book report (if any) follows the same resolution path
-  // (Docs/5-Backend-Schema.md §2.7) — always synced to the current
-  // teacher, not just set-once-if-empty, since a correction changing the
-  // teacher needs the book report to actually reflect it too.
-  const report = await getBookReportByTestRecordId(id);
-  if (report) {
-    await db.update(bookReports).set({ teacherId: input.teacherId }).where(eq(bookReports.id, report.id));
-  }
+// no longer gates the form on status). Atomic via the
+// correct_test_record_assignment RPC: update + audit_log insert + book-report
+// teacher sync all happen in one Postgres transaction now (the teacher sync
+// used to run as a separate, non-atomic call after the rest).
+export async function correctAssignment(id: string, input: { studentNumber: string; teacherId: string }) {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .rpc("correct_test_record_assignment", {
+      p_id: id,
+      p_student_number: input.studentNumber,
+      p_teacher_id: input.teacherId,
+    })
+    .single<TestRecordRow>();
+  if (error) throw error;
 
   await maybeDeleteScanImage(id);
-  return updated;
+  return data;
 }
 
 // Docs/5-Backend-Schema.md §2.6 retention: delete the scan image once both
-// statuses are resolved/clean. The 30-day fallback sweep is a separate
-// scheduled job, not implemented here.
+// statuses are resolved/clean. The time-based fallback sweep described in
+// that doc doesn't exist yet as a scheduled job anywhere in this codebase —
+// this event-driven half is the only retention mechanism that runs today.
 export async function maybeDeleteScanImage(id: string) {
   const record = await getTestRecord(id);
   if (!record || !record.scanImageRef) return;
@@ -322,9 +398,11 @@ export async function maybeDeleteScanImage(id: string) {
   const assignmentDone = record.assignmentStatus === "clean" || record.assignmentStatus === "resolved";
   if (!gradingDone || !assignmentDone) return;
 
-  const db = getDb();
   await deleteScanImage(record.scanImageRef);
-  await db.update(testRecords).set({ scanImageRef: null }).where(eq(testRecords.id, id));
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("test_records").update({ scan_image_ref: null }).eq("id", id);
+  if (error) throw error;
 }
 
 // Deletes one scanned test entirely: its book report (if any), its scan
@@ -342,8 +420,9 @@ export async function deleteTestRecord(id: string) {
     });
   }
 
-  const db = getDb();
-  await db.delete(testRecords).where(eq(testRecords.id, id));
+  const supabase = await createClient();
+  const { error } = await supabase.from("test_records").delete().eq("id", id);
+  if (error) throw error;
 }
 
 // Bulk variant — same per-record cleanup (book report, scan image) as
@@ -359,17 +438,20 @@ export async function deleteManyTestRecords(ids: string[]) {
 // day can span multiple batches; read-only (no bulk delete — that stays
 // scoped to a single batch's own page, per the plan).
 export async function listGradedToday() {
-  const db = getDb();
+  const supabase = await createClient();
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
 
-  return db
-    .select(queueSelection)
-    .from(testRecords)
-    .leftJoin(answerKeys, eq(testRecords.quizCode, answerKeys.quizCode))
-    .leftJoin(teachers, eq(testRecords.resolvedTeacherId, teachers.id))
-    .where(gte(testRecords.createdAt, todayStart))
-    .orderBy(sql`${testRecords.createdAt} desc`);
+  const { data, error } = await supabase
+    .from("test_records")
+    .select(QUEUE_COLUMNS)
+    .gte("created_at", todayStart.toISOString())
+    .order("created_at", { ascending: false })
+    .returns<RawQueueRow[]>();
+  if (error) throw error;
+
+  const rows = (data ?? []).map(flattenTeacher);
+  return attachDuplicateFlag(supabase, await attachBookTitles(supabase, rows));
 }
 
 // Called after a new Answer Key is created (app/(app)/answer-keys/actions.ts)
@@ -381,32 +463,33 @@ export async function reconcileTestsForNewAnswerKey(
   quizCode: string,
   questions: { questionNumber: number; correctAnswer: AnswerChoice }[]
 ) {
-  const db = getDb();
-  const stuck = await db
-    .select({ id: testRecords.id, quizCode: testRecords.quizCode })
-    .from(testRecords)
-    .where(
-      and(
-        ilike(testRecords.quizCode, quizCode.trim()),
-        eq(testRecords.gradingStatus, "needs_grading_review"),
-        sql`${testRecords.flagReasons} @> '["unrecognized_quiz_code"]'::jsonb`
-      )
-    );
+  const supabase = await createClient();
+  const { data: stuck, error } = await supabase
+    .from("test_records")
+    .select("id, quizCode:quiz_code")
+    .ilike("quiz_code", quizCode.trim())
+    .eq("grading_status", "needs_grading_review")
+    .contains("flag_reasons", ["unrecognized_quiz_code"])
+    .returns<{ id: string; quizCode: string }[]>();
+  if (error) throw error;
 
-  for (const record of stuck) {
-    await correctQuizCode(record.id, record.quizCode!, questions);
+  for (const record of stuck ?? []) {
+    await correctQuizCode(record.id, record.quizCode, questions);
   }
 
-  return stuck.length;
+  return (stuck ?? []).length;
 }
 
 export async function countsForBatch(batchId: string) {
-  const db = getDb();
-  const rows = await db
-    .select({ gradingStatus: testRecords.gradingStatus, assignmentStatus: testRecords.assignmentStatus })
-    .from(testRecords)
-    .where(eq(testRecords.batchId, batchId));
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("test_records")
+    .select("gradingStatus:grading_status, assignmentStatus:assignment_status")
+    .eq("batch_id", batchId)
+    .returns<{ gradingStatus: string; assignmentStatus: string }[]>();
+  if (error) throw error;
 
+  const rows = data ?? [];
   return {
     total: rows.length,
     clean: rows.filter((r) => r.gradingStatus !== "needs_grading_review" && r.assignmentStatus !== "needs_assignment_review").length,
@@ -416,29 +499,23 @@ export async function countsForBatch(batchId: string) {
 }
 
 export async function dashboardCounts() {
-  const db = getDb();
+  const supabase = await createClient();
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
 
-  const [gradedToday] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(testRecords)
-    .where(gte(testRecords.createdAt, todayStart));
-
-  const [gradingReview] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(testRecords)
-    .where(eq(testRecords.gradingStatus, "needs_grading_review"));
-
-  const [assignmentReview] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(testRecords)
-    .where(eq(testRecords.assignmentStatus, "needs_assignment_review"));
+  const [gradedToday, gradingReview, assignmentReview] = await Promise.all([
+    supabase.from("test_records").select("*", { count: "exact", head: true }).gte("created_at", todayStart.toISOString()),
+    supabase.from("test_records").select("*", { count: "exact", head: true }).eq("grading_status", "needs_grading_review"),
+    supabase.from("test_records").select("*", { count: "exact", head: true }).eq("assignment_status", "needs_assignment_review"),
+  ]);
+  if (gradedToday.error) throw gradedToday.error;
+  if (gradingReview.error) throw gradingReview.error;
+  if (assignmentReview.error) throw assignmentReview.error;
 
   return {
-    gradedToday: gradedToday?.count ?? 0,
-    gradingReview: gradingReview?.count ?? 0,
-    assignmentReview: assignmentReview?.count ?? 0,
+    gradedToday: gradedToday.count ?? 0,
+    gradingReview: gradingReview.count ?? 0,
+    assignmentReview: assignmentReview.count ?? 0,
   };
 }
 
@@ -450,7 +527,7 @@ export type TeacherReportRow = {
   quizCode: string | null;
   scorePercent: string | null;
   passed: boolean | null;
-  createdAt: Date;
+  createdAt: string;
 };
 
 export type TeacherReportGroup = {
@@ -464,46 +541,56 @@ export type TeacherReportGroup = {
 // test still sitting in either review queue is excluded (the page links
 // back to resolve it, rather than the report guessing), grouped by the
 // roster-resolved teacher (not the handwriting on the sheet), sorted by
-// scan order within each group.
+// scan order within each group. teachers!inner mirrors the original
+// innerJoin — a row with no resolved teacher is excluded entirely, not
+// grouped under null.
 export async function getTeacherGroupedReport(batchId: string): Promise<TeacherReportGroup[]> {
-  const db = getDb();
-  const rows = await db
-    .select({
-      id: testRecords.id,
-      scanOrder: testRecords.scanOrder,
-      studentNumber: testRecords.studentNumber,
-      bookTitle: answerKeys.bookTitle,
-      quizCode: testRecords.quizCode,
-      scorePercent: testRecords.scorePercent,
-      passed: testRecords.passed,
-      createdAt: testRecords.createdAt,
-      teacherId: teachers.id,
-      teacherFirstName: teachers.firstName,
-      teacherLastName: teachers.lastName,
-    })
-    .from(testRecords)
-    .leftJoin(answerKeys, eq(testRecords.quizCode, answerKeys.quizCode))
-    .innerJoin(teachers, eq(testRecords.resolvedTeacherId, teachers.id))
-    .where(
-      and(
-        eq(testRecords.batchId, batchId),
-        ne(testRecords.gradingStatus, "needs_grading_review"),
-        ne(testRecords.assignmentStatus, "needs_assignment_review")
-      )
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("test_records")
+    .select(
+      "id, scanOrder:scan_order, studentNumber:student_number, quizCode:quiz_code, scorePercent:score_percent, passed, createdAt:created_at, teachers!inner(id, firstName:first_name, lastName:last_name)"
     )
-    .orderBy(asc(teachers.lastName), asc(testRecords.scanOrder));
+    .eq("batch_id", batchId)
+    .neq("grading_status", "needs_grading_review")
+    .neq("assignment_status", "needs_assignment_review")
+    .returns<
+      {
+        id: string;
+        scanOrder: number;
+        studentNumber: string | null;
+        quizCode: string | null;
+        scorePercent: string | null;
+        passed: boolean | null;
+        createdAt: string;
+        teachers: { id: string; firstName: string; lastName: string };
+      }[]
+    >();
+  if (error) throw error;
+
+  const withTitles = await attachBookTitles(supabase, data ?? []);
+  withTitles.sort((a, b) => a.teachers.lastName.localeCompare(b.teachers.lastName) || a.scanOrder - b.scanOrder);
 
   const groups = new Map<string, TeacherReportGroup>();
-  for (const row of rows) {
-    if (!groups.has(row.teacherId)) {
-      groups.set(row.teacherId, {
-        teacherId: row.teacherId,
-        teacherFirstName: row.teacherFirstName,
-        teacherLastName: row.teacherLastName,
+  for (const row of withTitles) {
+    if (!groups.has(row.teachers.id)) {
+      groups.set(row.teachers.id, {
+        teacherId: row.teachers.id,
+        teacherFirstName: row.teachers.firstName,
+        teacherLastName: row.teachers.lastName,
         rows: [],
       });
     }
-    groups.get(row.teacherId)!.rows.push(row);
+    groups.get(row.teachers.id)!.rows.push({
+      id: row.id,
+      scanOrder: row.scanOrder,
+      studentNumber: row.studentNumber,
+      bookTitle: row.bookTitle,
+      quizCode: row.quizCode,
+      scorePercent: row.scorePercent,
+      passed: row.passed,
+      createdAt: row.createdAt,
+    });
   }
   return [...groups.values()];
 }
@@ -514,20 +601,45 @@ export async function getTeacherGroupedReport(batchId: string): Promise<TeacherR
 // same student + quiz code land next to each other, oldest first within
 // that group, for the page to visually group.
 export async function listPossibleDuplicates() {
-  const db = getDb();
-  return db
-    .select(queueSelection)
-    .from(testRecords)
-    .leftJoin(answerKeys, eq(testRecords.quizCode, answerKeys.quizCode))
-    .leftJoin(teachers, eq(testRecords.resolvedTeacherId, teachers.id))
-    .where(POSSIBLE_DUPLICATE)
-    .orderBy(asc(testRecords.studentNumber), asc(testRecords.quizCode), asc(testRecords.createdAt));
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("test_records")
+    .select(QUEUE_COLUMNS)
+    .not("student_number", "is", null)
+    .not("quiz_code", "is", null)
+    .returns<RawQueueRow[]>();
+  if (error) throw error;
+
+  const flattened = (data ?? []).map(flattenTeacher);
+  const withTitles = await attachBookTitles(supabase, flattened);
+  const withDuplicates = await attachDuplicateFlag(supabase, withTitles);
+
+  return withDuplicates
+    .filter((r) => r.isDuplicate)
+    .sort(
+      (a, b) =>
+        (a.studentNumber ?? "").localeCompare(b.studentNumber ?? "") ||
+        (a.quizCode ?? "").localeCompare(b.quizCode ?? "") ||
+        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+    );
 }
 
 export async function countPossibleDuplicates() {
-  const db = getDb();
-  const [row] = await db.select({ count: sql<number>`count(*)::int` }).from(testRecords).where(POSSIBLE_DUPLICATE);
-  return row?.count ?? 0;
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("test_records")
+    .select("studentNumber:student_number, quizCode:quiz_code")
+    .not("student_number", "is", null)
+    .not("quiz_code", "is", null)
+    .returns<{ studentNumber: string; quizCode: string }[]>();
+  if (error) throw error;
+
+  const counts = new Map<string, number>();
+  for (const r of data ?? []) {
+    const key = `${r.studentNumber}|${r.quizCode}`;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return [...counts.values()].filter((n) => n > 1).reduce((sum, n) => sum + n, 0);
 }
 
 // The student history page's data — every test this student number has
@@ -535,17 +647,26 @@ export async function countPossibleDuplicates() {
 // as listTestRecordsForBatch, not the Reports screen's exclude-and-link-back
 // one — a test stuck in review still belongs here). Includes a scored but
 // not-yet-assigned test with its real score, since grading and assignment
-// are independent tracks (Docs/5-Backend-Schema.md §1). The book-report
-// left join means a failing test's report status comes back in the same
-// query, no second round trip.
+// are independent tracks (Docs/5-Backend-Schema.md §1). book_reports is
+// embedded as a reverse relationship (its FK points at test_records, not
+// the other way around), so it comes back as an array — this app's
+// invariant is at most one per test record, so [0] is taken directly.
 export async function getStudentTestHistory(studentNumber: string) {
-  const db = getDb();
-  return db
-    .select({ ...queueSelection, bookReportStatus: bookReports.status })
-    .from(testRecords)
-    .leftJoin(answerKeys, eq(testRecords.quizCode, answerKeys.quizCode))
-    .leftJoin(teachers, eq(testRecords.resolvedTeacherId, teachers.id))
-    .leftJoin(bookReports, eq(bookReports.testRecordId, testRecords.id))
-    .where(eq(testRecords.studentNumber, studentNumber))
-    .orderBy(desc(testRecords.createdAt));
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("test_records")
+    .select(`${QUEUE_COLUMNS}, book_reports(status)`)
+    .eq("student_number", studentNumber)
+    .order("created_at", { ascending: false })
+    .returns<(RawQueueRow & { book_reports: { status: string }[] })[]>();
+  if (error) throw error;
+
+  const flattened = (data ?? []).map((row) => ({ ...flattenTeacher(row), book_reports: row.book_reports }));
+  const withTitles = await attachBookTitles(supabase, flattened);
+  const withDuplicates = await attachDuplicateFlag(supabase, withTitles);
+
+  return withDuplicates.map((r) => ({
+    ...r,
+    bookReportStatus: r.book_reports?.[0]?.status ?? null,
+  }));
 }

@@ -18,7 +18,7 @@ export function buildReportWorkbook(batchLabel: string, groups: TeacherReportGro
         row.bookTitle ?? row.quizCode ?? "",
         row.scorePercent !== null ? Number(row.scorePercent) : "",
         row.passed === null ? "" : row.passed ? "Pass" : "Fail",
-        row.createdAt.toISOString().slice(0, 10),
+        new Date(row.createdAt).toISOString().slice(0, 10),
       ]);
     }
   }

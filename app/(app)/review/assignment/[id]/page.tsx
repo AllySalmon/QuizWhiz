@@ -1,9 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getTestRecord } from "@/lib/db/queries/testRecords";
+import { getTestRecord, getTestRecordScanImageUrl } from "@/lib/db/queries/testRecords";
 import { getStudent } from "@/lib/db/queries/studentRoster";
 import { listActiveTeachers } from "@/lib/db/queries/teachers";
-import { getSignedScanImageUrl } from "@/lib/supabase/storage";
 import { ReviewTabs } from "../../ReviewTabs";
 import { correctAssignmentAction } from "../actions";
 import { AssignmentCorrectionForm } from "./AssignmentCorrectionForm";
@@ -27,7 +26,7 @@ export default async function AssignmentReviewDetailPage({
 
   const [teachers, imageUrl, rosterStudent] = await Promise.all([
     listActiveTeachers(),
-    record.scanImageRef ? getSignedScanImageUrl(record.scanImageRef) : Promise.resolve(null),
+    getTestRecordScanImageUrl(id),
     record.studentNumber ? getStudent(record.studentNumber) : Promise.resolve(null),
   ]);
 

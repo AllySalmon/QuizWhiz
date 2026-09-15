@@ -7,7 +7,6 @@ import { getAnswerKeyByQuizCode } from "@/lib/db/queries/answerKeys";
 import { getStudent } from "@/lib/db/queries/studentRoster";
 import { getTeacher } from "@/lib/db/queries/teachers";
 import { createTestRecord, maybeDeleteScanImage } from "@/lib/db/queries/testRecords";
-import { createBookReport } from "@/lib/db/queries/bookReports";
 import { scoreTest } from "@/lib/grading/scoreTest";
 import { normalizeImageBuffer } from "@/lib/media/serverNormalize";
 
@@ -95,6 +94,9 @@ export async function POST(request: Request) {
       rosterTeacherLastName,
     });
 
+    // Atomic: the test record and its book report (if it failed) are
+    // inserted together via a Postgres RPC — see create_graded_test_record
+    // in supabase/test-records-functions.sql.
     const record = await createTestRecord({
       batchId,
       scanOrder,
@@ -110,15 +112,6 @@ export async function POST(request: Request) {
       flagReasons: result.flagReasons,
       scanImageRef: storagePath,
     });
-
-    if (result.passed === false) {
-      await createBookReport({
-        testRecordId: record.id,
-        studentNumber: record.studentNumber ?? "",
-        teacherId: result.resolvedTeacherId,
-        dueDate: new Date().toISOString().slice(0, 10),
-      });
-    }
 
     // If this test needed no review at all, its image is eligible for
     // deletion immediately — no need to wait for a review action.
