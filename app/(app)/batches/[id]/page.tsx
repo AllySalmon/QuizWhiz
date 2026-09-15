@@ -22,9 +22,14 @@ export default async function BatchSummaryPage({ params }: { params: Promise<{ i
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">{batch.label}</h1>
           <p className="mt-1 text-sm text-muted-foreground">{counts.total} tests graded</p>
         </div>
-        <Link href={`/batches/${id}/delete`} className="text-sm font-medium text-destructive hover:underline">
-          Delete batch
-        </Link>
+        <div className="flex items-center gap-4">
+          <Link href={`/batches/${id}/report`} className="text-sm font-medium text-primary hover:underline">
+            Generate Report
+          </Link>
+          <Link href={`/batches/${id}/delete`} className="text-sm font-medium text-destructive hover:underline">
+            Delete batch
+          </Link>
+        </div>
       </div>
 
       <div className="mt-6 grid grid-cols-3 gap-4 sm:max-w-lg">

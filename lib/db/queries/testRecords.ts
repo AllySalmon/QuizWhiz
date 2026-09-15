@@ -1,5 +1,5 @@
 import "server-only";
-import { eq, and, asc, sql, gte, inArray, ilike } from "drizzle-orm";
+import { eq, and, asc, sql, gte, inArray, ilike, ne } from "drizzle-orm";
 import { getDb } from "../client";
 import { testRecords, answerKeys, teachers, bookReports } from "../schema";
 import { deleteScanImage } from "@/lib/supabase/storage";
@@ -387,4 +387,70 @@ export async function dashboardCounts() {
     gradingReview: gradingReview?.count ?? 0,
     assignmentReview: assignmentReview?.count ?? 0,
   };
+}
+
+export type TeacherReportRow = {
+  id: string;
+  scanOrder: number;
+  studentNumber: string | null;
+  bookTitle: string | null;
+  quizCode: string | null;
+  scorePercent: string | null;
+  passed: boolean | null;
+  createdAt: Date;
+};
+
+export type TeacherReportGroup = {
+  teacherId: string;
+  teacherFirstName: string;
+  teacherLastName: string;
+  rows: TeacherReportRow[];
+};
+
+// Docs/1-PRD.md §5.6: a report only ever contains fully-resolved tests — a
+// test still sitting in either review queue is excluded (the page links
+// back to resolve it, rather than the report guessing), grouped by the
+// roster-resolved teacher (not the handwriting on the sheet), sorted by
+// scan order within each group.
+export async function getTeacherGroupedReport(batchId: string): Promise<TeacherReportGroup[]> {
+  const db = getDb();
+  const rows = await db
+    .select({
+      id: testRecords.id,
+      scanOrder: testRecords.scanOrder,
+      studentNumber: testRecords.studentNumber,
+      bookTitle: answerKeys.bookTitle,
+      quizCode: testRecords.quizCode,
+      scorePercent: testRecords.scorePercent,
+      passed: testRecords.passed,
+      createdAt: testRecords.createdAt,
+      teacherId: teachers.id,
+      teacherFirstName: teachers.firstName,
+      teacherLastName: teachers.lastName,
+    })
+    .from(testRecords)
+    .leftJoin(answerKeys, eq(testRecords.quizCode, answerKeys.quizCode))
+    .innerJoin(teachers, eq(testRecords.resolvedTeacherId, teachers.id))
+    .where(
+      and(
+        eq(testRecords.batchId, batchId),
+        ne(testRecords.gradingStatus, "needs_grading_review"),
+        ne(testRecords.assignmentStatus, "needs_assignment_review")
+      )
+    )
+    .orderBy(asc(teachers.lastName), asc(testRecords.scanOrder));
+
+  const groups = new Map<string, TeacherReportGroup>();
+  for (const row of rows) {
+    if (!groups.has(row.teacherId)) {
+      groups.set(row.teacherId, {
+        teacherId: row.teacherId,
+        teacherFirstName: row.teacherFirstName,
+        teacherLastName: row.teacherLastName,
+        rows: [],
+      });
+    }
+    groups.get(row.teacherId)!.rows.push(row);
+  }
+  return [...groups.values()];
 }

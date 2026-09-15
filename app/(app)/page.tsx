@@ -4,7 +4,7 @@ import { answerKeysExist } from "@/lib/db/queries/answerKeys";
 import { teachersExist } from "@/lib/db/queries/teachers";
 import { studentRosterExists } from "@/lib/db/queries/studentRoster";
 import { dashboardCounts, countEscalatedGradingReview } from "@/lib/db/queries/testRecords";
-import { countOutstandingBookReports } from "@/lib/db/queries/bookReports";
+import { countOutstandingBookReports, countEscalatedBookReports } from "@/lib/db/queries/bookReports";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
@@ -89,10 +89,11 @@ function SetupChecklist({
 }
 
 async function Dashboard() {
-  const [counts, outstandingReports, escalatedGradingReview] = await Promise.all([
+  const [counts, outstandingReports, escalatedGradingReview, escalatedBookReports] = await Promise.all([
     dashboardCounts(),
     countOutstandingBookReports(),
     countEscalatedGradingReview(),
+    countEscalatedBookReports(),
   ]);
 
   return (
@@ -113,18 +114,26 @@ async function Dashboard() {
         </div>
       )}
 
+      {escalatedBookReports > 0 && (
+        <div className="mt-4 flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-foreground">
+          <AlertTriangle className="size-4 shrink-0 text-destructive" aria-hidden />
+          <span>
+            {escalatedBookReports} book report{escalatedBookReports === 1 ? "" : "s"}{" "}
+            {escalatedBookReports === 1 ? "has" : "have"} been outstanding for 2+ weeks —{" "}
+            <Link href="/book-reports" className="font-medium underline underline-offset-2">
+              view Book Reports
+            </Link>
+            .
+          </span>
+        </div>
+      )}
+
       <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
         <StatCard label="Graded today" value={String(counts.gradedToday)} href="/graded-today" />
         <StatCard label="Grading Review" value={String(counts.gradingReview)} href="/review/grading" />
         <StatCard label="Needs Review" value={String(counts.assignmentReview)} href="/review/assignment" />
-        <StatCard label="Outstanding reports" value={String(outstandingReports)} />
+        <StatCard label="Outstanding reports" value={String(outstandingReports)} href="/book-reports" />
       </div>
-
-      <p className="mt-6 text-sm text-muted-foreground">
-        The full Reports screen and Book Report Tracker (Outstanding/Escalated list, the escalation
-        banner for outstanding reports) are Milestone 2 — the Outstanding Reports count above is
-        real, but there&apos;s no dedicated view for it yet.
-      </p>
     </div>
   );
 }

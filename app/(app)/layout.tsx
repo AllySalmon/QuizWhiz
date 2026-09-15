@@ -7,6 +7,7 @@ const NAV_LINKS = [
   { href: "/scan", label: "Scan & Upload" },
   { href: "/batches", label: "Scan History" },
   { href: "/review/grading", label: "Review" },
+  { href: "/book-reports", label: "Book Reports" },
   { href: "/answer-keys", label: "Answer Keys" },
   { href: "/roster/teachers", label: "Roster" },
   { href: "/pilot", label: "Accuracy Check" },
@@ -38,7 +39,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               <Link
                 key={link.href}
                 href={link.href}
-                className="text-sm font-medium whitespace-nowrap text-muted-foreground transition-colors hover:text-foreground"
+                className="text-sm font-medium whitespace-nowrap text-muted-foreground hover:text-foreground"
               >
                 {link.label}
               </Link>
