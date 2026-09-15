@@ -36,8 +36,11 @@ export const bookReportStatusEnum = pgEnum("book_report_status", [
 ]);
 
 // 2.1 teachers — real records (staff, not the children this app protects)
+// user_id: same treatment as answerKeys.userId — added nullable here on
+// purpose, NOT NULL/FK/default/RLS applied by hand in supabase/roster-rls.sql.
 export const teachers = pgTable("teachers", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: uuid("user_id"),
   firstName: text("first_name").notNull(),
   lastName: text("last_name").notNull(), // matched against handwritten OCR text
   isActive: boolean("is_active").notNull().default(true), // soft-delete flag
@@ -46,8 +49,16 @@ export const teachers = pgTable("teachers", {
 });
 
 // 2.2 student_roster — Student -> Teacher assignment (never a student name)
+// user_id: added nullable here on purpose, same as answerKeys.userId — kept
+// out of Drizzle's PK modeling too. The real primary key becomes composite
+// (user_id, student_number) via hand-written SQL (supabase/roster-rls.sql),
+// not reflected here, so drizzle-kit's migration for this column addition
+// doesn't also try to restructure the PK against not-yet-backfilled rows.
+// Nothing references student_roster by FK (confirmed), so no other table
+// needs updating for this.
 export const studentRoster = pgTable("student_roster", {
   studentNumber: text("student_number").primaryKey(),
+  userId: uuid("user_id"),
   teacherId: uuid("teacher_id").references(() => teachers.id), // null only transiently during reassignment
   gradeBand: gradeBandEnum("grade_band").notNull(), // informational only — never cross-checked at grading time
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().default(sql`now()`),

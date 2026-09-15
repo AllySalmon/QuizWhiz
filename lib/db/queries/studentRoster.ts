@@ -1,135 +1,127 @@
 import "server-only";
-import { eq, ilike, or, asc, inArray, sql } from "drizzle-orm";
-import { getDb } from "../client";
-import { studentRoster, teachers, auditLog } from "../schema";
+import { createClient } from "@/lib/supabase/server";
 import type { GradeBand } from "./answerKeys";
 
-// Grade first (Jr. before 3-5, matching the SSYRA program sequence — not
-// alphabetical, since "3-5" would otherwise sort before "jr"), then
-// teacher's last name, then student number. No student names exist in this
-// schema to sort by (Docs/1-PRD.md §6) — student number is the identifier.
-const STUDENT_LIST_ORDER = [
-  sql`case when ${studentRoster.gradeBand} = 'jr' then 0 else 1 end`,
-  asc(teachers.lastName),
-  asc(studentRoster.studentNumber),
-];
+// Phase 3 of the RLS conversion — same reasoning as teachers.ts. Search and
+// sort (grade band jr-before-3-5, then teacher last name, then student
+// number) happen in JS after an RLS-scoped fetch rather than via PostgREST
+// filters/order — the grade-band ordering is a custom two-value rule
+// PostgREST's .order() can't express, and filtering the embedded teachers
+// resource's last_name alongside student_number in one .or() isn't reliably
+// supported either. Small data volume (a school's own roster) makes this a
+// reasonable tradeoff, same one already made for searchAnswerKeys()/
+// listPossibleDuplicates() elsewhere in this query layer.
+
+type StudentRow = {
+  studentNumber: string;
+  gradeBand: GradeBand;
+  teacherId: string | null;
+  teachers: { firstName: string; lastName: string } | null;
+};
+
+const GRADE_RANK: Record<GradeBand, number> = { jr: 0, "3-5": 1 };
+
+function sortStudents<T extends { gradeBand: GradeBand; teacherLastName: string | null; studentNumber: string }>(
+  rows: T[]
+) {
+  return rows.sort(
+    (a, b) =>
+      GRADE_RANK[a.gradeBand] - GRADE_RANK[b.gradeBand] ||
+      (a.teacherLastName ?? "￿").localeCompare(b.teacherLastName ?? "￿") ||
+      a.studentNumber.localeCompare(b.studentNumber)
+  );
+}
 
 export async function listStudents(search?: string) {
-  const db = getDb();
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("student_roster")
+    .select("studentNumber:student_number, gradeBand:grade_band, teacherId:teacher_id, teachers(firstName:first_name, lastName:last_name)")
+    .returns<StudentRow[]>();
+  if (error) throw error;
 
-  const base = db
-    .select({
-      studentNumber: studentRoster.studentNumber,
-      gradeBand: studentRoster.gradeBand,
-      teacherId: studentRoster.teacherId,
-      teacherFirstName: teachers.firstName,
-      teacherLastName: teachers.lastName,
-    })
-    .from(studentRoster)
-    .leftJoin(teachers, eq(studentRoster.teacherId, teachers.id));
+  const flattened = (data ?? []).map((r) => ({
+    studentNumber: r.studentNumber,
+    gradeBand: r.gradeBand,
+    teacherId: r.teacherId,
+    teacherFirstName: r.teachers?.firstName ?? null,
+    teacherLastName: r.teachers?.lastName ?? null,
+  }));
 
-  const query = search
-    ? base.where(
-        or(
-          ilike(studentRoster.studentNumber, `%${search}%`),
-          ilike(teachers.lastName, `%${search}%`)
-        )
+  const filtered = search
+    ? flattened.filter(
+        (s) =>
+          s.studentNumber.toLowerCase().includes(search.toLowerCase()) ||
+          (s.teacherLastName?.toLowerCase().includes(search.toLowerCase()) ?? false)
       )
-    : base;
+    : flattened;
 
-  return query.orderBy(...STUDENT_LIST_ORDER);
+  return sortStudents(filtered);
 }
 
 export async function getStudent(studentNumber: string) {
-  const db = getDb();
-  const [student] = await db
-    .select()
-    .from(studentRoster)
-    .where(eq(studentRoster.studentNumber, studentNumber));
-  return student ?? null;
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("student_roster")
+    .select("studentNumber:student_number, gradeBand:grade_band, teacherId:teacher_id")
+    .eq("student_number", studentNumber)
+    .maybeSingle<{ studentNumber: string; gradeBand: GradeBand; teacherId: string | null }>();
+  if (error) throw error;
+  return data ?? null;
 }
 
-export async function upsertStudent(input: {
-  studentNumber: string;
-  teacherId: string;
-  gradeBand: GradeBand;
-}) {
-  const db = getDb();
-  const [student] = await db
-    .insert(studentRoster)
-    .values(input)
-    .onConflictDoUpdate({
-      target: studentRoster.studentNumber,
-      set: { teacherId: input.teacherId, gradeBand: input.gradeBand, updatedAt: new Date() },
-    })
-    .returning();
-  return student;
+export async function upsertStudent(input: { studentNumber: string; teacherId: string; gradeBand: GradeBand }) {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("student_roster")
+    .upsert(
+      { student_number: input.studentNumber, teacher_id: input.teacherId, grade_band: input.gradeBand },
+      { onConflict: "user_id,student_number" }
+    )
+    .select("studentNumber:student_number, gradeBand:grade_band, teacherId:teacher_id")
+    .single<{ studentNumber: string; gradeBand: GradeBand; teacherId: string | null }>();
+  if (error) throw error;
+  return data;
 }
 
 // Used by the CSV import (lib/csv/studentRosterImport.ts) after it has
-// already resolved each row's teacher and validated the grade band —
-// this function just applies the upsert, per row, inside one transaction.
-export async function upsertManyStudents(
-  rows: { studentNumber: string; teacherId: string; gradeBand: GradeBand }[]
-) {
+// already resolved each row's teacher and validated the grade band. Atomic
+// via the upsert_many_students RPC (supabase/roster-functions.sql) —
+// supabase-js has no multi-statement transaction primitive.
+export async function upsertManyStudents(rows: { studentNumber: string; teacherId: string; gradeBand: GradeBand }[]) {
   if (rows.length === 0) return 0;
-  const db = getDb();
-
-  await db.transaction(async (tx) => {
-    for (const row of rows) {
-      await tx
-        .insert(studentRoster)
-        .values(row)
-        .onConflictDoUpdate({
-          target: studentRoster.studentNumber,
-          set: { teacherId: row.teacherId, gradeBand: row.gradeBand, updatedAt: new Date() },
-        });
-    }
-  });
-
-  return rows.length;
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("upsert_many_students", { p_rows: rows });
+  if (error) throw error;
+  return data as number;
 }
 
 // Hard delete — student_roster has no soft-delete flag (unlike teachers).
 // Safe against the schema: test_records/book_reports reference student_number
 // by value, not a FK (Docs/5-Backend-Schema.md §3), so historical records
 // survive and simply become "not in the roster" again if referenced later —
-// the same state a never-added student is already in.
+// the same state a never-added student is already in. Atomic (delete +
+// audit_log insert) via the delete_student RPC.
 export async function deleteStudent(studentNumber: string) {
-  const db = getDb();
-  await db.transaction(async (tx) => {
-    await tx.delete(studentRoster).where(eq(studentRoster.studentNumber, studentNumber));
-    await tx.insert(auditLog).values({
-      action: "student_deleted",
-      entityType: "student_roster",
-      entityId: studentNumber,
-      details: {},
-    });
-  });
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("delete_student", { p_student_number: studentNumber });
+  if (error) throw error;
 }
 
 // Bulk variant of deleteStudent — no reassignment needed (unlike teachers),
-// since deleting a student just removes their roster row.
+// since deleting a student just removes their roster row. Atomic via the
+// delete_many_students RPC.
 export async function deleteManyStudents(studentNumbers: string[]) {
   if (studentNumbers.length === 0) return 0;
-  const db = getDb();
-  await db.transaction(async (tx) => {
-    await tx.delete(studentRoster).where(inArray(studentRoster.studentNumber, studentNumbers));
-    await tx.insert(auditLog).values({
-      action: "students_bulk_deleted",
-      entityType: "student_roster",
-      entityId: studentNumbers.join(","),
-      details: { studentNumbers },
-    });
-  });
-  return studentNumbers.length;
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("delete_many_students", { p_student_numbers: studentNumbers });
+  if (error) throw error;
+  return data as number;
 }
 
 export async function studentRosterExists() {
-  const db = getDb();
-  const [row] = await db
-    .select({ studentNumber: studentRoster.studentNumber })
-    .from(studentRoster)
-    .limit(1);
-  return Boolean(row);
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("student_roster").select("student_number").limit(1);
+  if (error) throw error;
+  return (data?.length ?? 0) > 0;
 }
