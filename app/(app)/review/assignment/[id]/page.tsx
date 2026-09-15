@@ -20,14 +20,10 @@ export default async function AssignmentReviewDetailPage({
   const record = await getTestRecord(id);
   if (!record) notFound();
 
-  if (record.assignmentStatus !== "needs_assignment_review") {
-    return (
-      <div>
-        <ReviewTabs active="assignment" batchId={batch} />
-        <p className="mt-8 text-sm text-muted-foreground">This item has already been resolved.</p>
-      </div>
-    );
-  }
+  // Reachable even once already resolved — a genuine correction, not just
+  // the first-time resolution. There was previously no way to fix a wrong
+  // assignment after the fact short of deleting and re-scanning.
+  const alreadyResolved = record.assignmentStatus !== "needs_assignment_review";
 
   const [teachers, imageUrl, rosterStudent] = await Promise.all([
     listActiveTeachers(),
@@ -61,7 +57,15 @@ export default async function AssignmentReviewDetailPage({
         </div>
 
         <div>
-          <h1 className="text-lg font-semibold text-foreground">Assign a teacher</h1>
+          <h1 className="text-lg font-semibold text-foreground">
+            {alreadyResolved ? "Correct the assignment" : "Assign a teacher"}
+          </h1>
+          {alreadyResolved && (
+            <p className="mt-1 text-sm text-muted-foreground">
+              This was already resolved — saving updates the student number and teacher, and syncs any
+              book report to the corrected teacher.
+            </p>
+          )}
           <dl className="mt-2 flex flex-col gap-1 text-sm">
             <div className="flex gap-2">
               <dt className="text-muted-foreground">OCR&apos;d teacher name:</dt>
@@ -73,10 +77,12 @@ export default async function AssignmentReviewDetailPage({
                 <dd className="text-foreground">student is assigned to a different teacher on file</dd>
               </div>
             )}
-            <div className="flex gap-2">
-              <dt className="text-muted-foreground">Flagged because:</dt>
-              <dd className="text-foreground">{flagReasons.join(", ")}</dd>
-            </div>
+            {flagReasons.length > 0 && (
+              <div className="flex gap-2">
+                <dt className="text-muted-foreground">{alreadyResolved ? "Originally flagged because:" : "Flagged because:"}</dt>
+                <dd className="text-foreground">{flagReasons.join(", ")}</dd>
+              </div>
+            )}
           </dl>
 
           <div className="mt-4">
@@ -84,7 +90,7 @@ export default async function AssignmentReviewDetailPage({
               action={correctAssignmentAction.bind(null, id, batch ?? null)}
               initialStudentNumber={record.studentNumber ?? ""}
               teachers={teachers}
-              suggestedTeacherId={rosterStudent?.teacherId ?? undefined}
+              suggestedTeacherId={record.resolvedTeacherId ?? rosterStudent?.teacherId ?? undefined}
             />
           </div>
         </div>

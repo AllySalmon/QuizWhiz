@@ -1,7 +1,7 @@
 import "server-only";
 import { eq, and, asc, desc, sql, gte, inArray, ilike, ne } from "drizzle-orm";
 import { getDb } from "../client";
-import { testRecords, answerKeys, teachers, bookReports } from "../schema";
+import { testRecords, answerKeys, teachers, bookReports, auditLog } from "../schema";
 import { deleteScanImage } from "@/lib/supabase/storage";
 import { createBookReport, deleteBookReportByTestRecordId, getBookReportByTestRecordId } from "./bookReports";
 import type { AnswerChoice } from "./answerKeys";
@@ -256,25 +256,54 @@ async function syncBookReportOnScoreChange(record: typeof testRecords.$inferSele
   }
 }
 
+// Also reachable after assignmentStatus is already "resolved" — a genuine
+// correction, not just the first-time resolution (review/assignment/[id]/page.tsx
+// no longer gates the form on status). Logs to audit_log either way, since a
+// record of "resolved to X" is useful on its own, not just re-corrections —
+// same insert-in-the-transaction pattern as reassignAndDeleteTeacher
+// (lib/db/queries/teachers.ts), the only other audit_log writer today.
 export async function correctAssignment(
   id: string,
   input: { studentNumber: string; teacherId: string }
 ) {
   const db = getDb();
-  const [updated] = await db
-    .update(testRecords)
-    .set({
-      studentNumber: input.studentNumber,
-      resolvedTeacherId: input.teacherId,
-      assignmentStatus: "resolved",
-      reviewedAt: new Date(),
-    })
-    .where(eq(testRecords.id, id))
-    .returning();
+  const existing = await getTestRecord(id);
+  if (!existing) throw new Error("Test record not found.");
 
-  // The book report (if any) follows the same resolution path (Docs/5-Backend-Schema.md §2.7).
+  const updated = await db.transaction(async (tx) => {
+    const [row] = await tx
+      .update(testRecords)
+      .set({
+        studentNumber: input.studentNumber,
+        resolvedTeacherId: input.teacherId,
+        assignmentStatus: "resolved",
+        reviewedAt: new Date(),
+      })
+      .where(eq(testRecords.id, id))
+      .returning();
+
+    await tx.insert(auditLog).values({
+      action: "test_record_assignment_corrected",
+      entityType: "test_record",
+      entityId: id,
+      details: {
+        previousStudentNumber: existing.studentNumber,
+        newStudentNumber: input.studentNumber,
+        previousTeacherId: existing.resolvedTeacherId,
+        newTeacherId: input.teacherId,
+        wasAlreadyResolved: existing.assignmentStatus === "resolved",
+      },
+    });
+
+    return row;
+  });
+
+  // The book report (if any) follows the same resolution path
+  // (Docs/5-Backend-Schema.md §2.7) — always synced to the current
+  // teacher, not just set-once-if-empty, since a correction changing the
+  // teacher needs the book report to actually reflect it too.
   const report = await getBookReportByTestRecordId(id);
-  if (report && !report.teacherId) {
+  if (report) {
     await db.update(bookReports).set({ teacherId: input.teacherId }).where(eq(bookReports.id, report.id));
   }
 
