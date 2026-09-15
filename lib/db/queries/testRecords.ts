@@ -478,3 +478,25 @@ export async function getTeacherGroupedReport(batchId: string): Promise<TeacherR
   }
   return [...groups.values()];
 }
+
+// Global, cross-batch visibility for the duplicate flag — deliberately not
+// a new review queue (that would blur "blocking, needs resolution" against
+// "advisory, still clean and reportable"). Sorted so records sharing the
+// same student + quiz code land next to each other, oldest first within
+// that group, for the page to visually group.
+export async function listPossibleDuplicates() {
+  const db = getDb();
+  return db
+    .select(queueSelection)
+    .from(testRecords)
+    .leftJoin(answerKeys, eq(testRecords.quizCode, answerKeys.quizCode))
+    .leftJoin(teachers, eq(testRecords.resolvedTeacherId, teachers.id))
+    .where(POSSIBLE_DUPLICATE)
+    .orderBy(asc(testRecords.studentNumber), asc(testRecords.quizCode), asc(testRecords.createdAt));
+}
+
+export async function countPossibleDuplicates() {
+  const db = getDb();
+  const [row] = await db.select({ count: sql<number>`count(*)::int` }).from(testRecords).where(POSSIBLE_DUPLICATE);
+  return row?.count ?? 0;
+}

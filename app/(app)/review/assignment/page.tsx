@@ -51,12 +51,20 @@ export default async function AssignmentReviewPage({
                     </div>
                   </TableCell>
                   <TableCell className="text-right">
-                    <Link
-                      href={`/review/assignment/${item.id}`}
-                      className="text-sm font-medium text-primary hover:underline"
-                    >
-                      Review
-                    </Link>
+                    <div className="flex items-center justify-end gap-3">
+                      <Link
+                        href={`/review/assignment/${item.id}`}
+                        className="text-sm font-medium text-primary hover:underline"
+                      >
+                        Review
+                      </Link>
+                      <Link
+                        href={`/batches/${item.batchId}/${item.id}/delete`}
+                        className="text-sm font-medium text-destructive hover:underline"
+                      >
+                        Delete
+                      </Link>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}

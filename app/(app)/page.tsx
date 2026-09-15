@@ -3,7 +3,7 @@ import { CheckCircle2, Circle, AlertTriangle } from "lucide-react";
 import { answerKeysExist } from "@/lib/db/queries/answerKeys";
 import { teachersExist } from "@/lib/db/queries/teachers";
 import { studentRosterExists } from "@/lib/db/queries/studentRoster";
-import { dashboardCounts, countEscalatedGradingReview } from "@/lib/db/queries/testRecords";
+import { dashboardCounts, countEscalatedGradingReview, countPossibleDuplicates } from "@/lib/db/queries/testRecords";
 import { countOutstandingBookReports, countEscalatedBookReports } from "@/lib/db/queries/bookReports";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -89,12 +89,14 @@ function SetupChecklist({
 }
 
 async function Dashboard() {
-  const [counts, outstandingReports, escalatedGradingReview, escalatedBookReports] = await Promise.all([
-    dashboardCounts(),
-    countOutstandingBookReports(),
-    countEscalatedGradingReview(),
-    countEscalatedBookReports(),
-  ]);
+  const [counts, outstandingReports, escalatedGradingReview, escalatedBookReports, possibleDuplicates] =
+    await Promise.all([
+      dashboardCounts(),
+      countOutstandingBookReports(),
+      countEscalatedGradingReview(),
+      countEscalatedBookReports(),
+      countPossibleDuplicates(),
+    ]);
 
   return (
     <div>
@@ -133,6 +135,7 @@ async function Dashboard() {
         <StatCard label="Grading Review" value={String(counts.gradingReview)} href="/review/grading" />
         <StatCard label="Needs Review" value={String(counts.assignmentReview)} href="/review/assignment" />
         <StatCard label="Outstanding reports" value={String(outstandingReports)} href="/book-reports" />
+        <StatCard label="Possible Duplicates" value={String(possibleDuplicates)} href="/duplicates" />
       </div>
     </div>
   );

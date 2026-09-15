@@ -7,6 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DuplicateBadge } from "@/components/DuplicateBadge";
+import { StatusBadge } from "@/components/StatusBadge";
 
 type TestRecordRow = {
   id: string;
@@ -120,21 +121,4 @@ export function BatchTestRecordsTable({ batchId, records }: { batchId: string; r
       </div>
     </div>
   );
-}
-
-function StatusBadge({
-  gradingStatus,
-  assignmentStatus,
-}: {
-  gradingStatus: "clean" | "needs_grading_review" | "resolved";
-  assignmentStatus: "clean" | "needs_assignment_review" | "resolved";
-}) {
-  if (gradingStatus === "needs_grading_review") {
-    return <span className="text-sm text-destructive">Needs grading review</span>;
-  }
-  if (assignmentStatus === "needs_assignment_review") {
-    return <span className="text-sm text-destructive">Needs assignment review</span>;
-  }
-  const wasReviewed = gradingStatus === "resolved" || assignmentStatus === "resolved";
-  return <span className="text-sm text-muted-foreground">{wasReviewed ? "Resolved" : "Clean"}</span>;
 }

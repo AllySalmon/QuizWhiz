@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getTestRecord } from "@/lib/db/queries/testRecords";
 import { getStudent } from "@/lib/db/queries/studentRoster";
@@ -40,7 +41,16 @@ export default async function AssignmentReviewDetailPage({
     <div>
       <ReviewTabs active="assignment" batchId={batch} />
 
-      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
+      <div className="mt-4 flex justify-end">
+        <Link
+          href={`/batches/${record.batchId}/${id}/delete`}
+          className="text-sm font-medium text-destructive hover:underline"
+        >
+          Delete this scan
+        </Link>
+      </div>
+
+      <div className="mt-2 grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div className="rounded-xl border border-border bg-card p-2">
           {imageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { listGradedToday } from "@/lib/db/queries/testRecords";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DuplicateBadge } from "@/components/DuplicateBadge";
+import { StatusBadge } from "@/components/StatusBadge";
 
 export default async function GradedTodayPage() {
   const records = await listGradedToday();
@@ -65,21 +66,4 @@ export default async function GradedTodayPage() {
       )}
     </div>
   );
-}
-
-function StatusBadge({
-  gradingStatus,
-  assignmentStatus,
-}: {
-  gradingStatus: "clean" | "needs_grading_review" | "resolved";
-  assignmentStatus: "clean" | "needs_assignment_review" | "resolved";
-}) {
-  if (gradingStatus === "needs_grading_review") {
-    return <span className="text-sm text-destructive">Needs grading review</span>;
-  }
-  if (assignmentStatus === "needs_assignment_review") {
-    return <span className="text-sm text-destructive">Needs assignment review</span>;
-  }
-  const wasReviewed = gradingStatus === "resolved" || assignmentStatus === "resolved";
-  return <span className="text-sm text-muted-foreground">{wasReviewed ? "Resolved" : "Clean"}</span>;
 }
