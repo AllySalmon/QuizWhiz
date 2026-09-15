@@ -5,8 +5,13 @@ import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Loader2, X, AlertTriangle } from "lucide-react";
 import { tryNormalizeImageForUpload } from "@/lib/media/normalizeImage";
+import { pdfFileToPageImages } from "@/lib/media/pdfToImages";
 
 const CONCURRENCY = 3;
+
+function isPdf(file: File) {
+  return file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+}
 
 type ItemStatus = "queued" | "uploading" | "done" | "failed";
 
@@ -32,11 +37,36 @@ export function ScanUploadForm() {
   const [uploading, setUploading] = useState(false);
   const [batchId, setBatchId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [hasPdfSource, setHasPdfSource] = useState(false);
+  const [preparing, setPreparing] = useState<{ fileName: string; index: number; total: number } | null>(null);
 
-  function handleFilesSelected(fileList: FileList | null) {
+  async function handleFilesSelected(fileList: FileList | null) {
     if (!fileList) return;
-    setFiles((prev) => [...prev, ...Array.from(fileList)]);
+    const picked = Array.from(fileList);
     if (inputRef.current) inputRef.current.value = "";
+
+    setError(null);
+    const expanded: File[] = [];
+
+    for (let i = 0; i < picked.length; i++) {
+      const file = picked[i];
+      if (!isPdf(file)) {
+        expanded.push(file);
+        continue;
+      }
+
+      setHasPdfSource(true);
+      setPreparing({ fileName: file.name, index: i + 1, total: picked.length });
+      try {
+        const pages = await pdfFileToPageImages(file);
+        expanded.push(...pages);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : `Couldn't read "${file.name}".`);
+      }
+    }
+
+    setPreparing(null);
+    setFiles((prev) => [...prev, ...expanded]);
   }
 
   function removeFile(index: number) {
@@ -55,7 +85,11 @@ export function ScanUploadForm() {
       const batchRes = await fetch("/api/batches", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ label: formatBatchLabel(new Date()), itemCount: files.length }),
+        body: JSON.stringify({
+          label: formatBatchLabel(new Date()),
+          itemCount: files.length,
+          sourceType: hasPdfSource ? "pdf" : "photo",
+        }),
       });
       const batchJson = await batchRes.json();
       if (!batchJson.ok) throw new Error(batchJson.error ?? "Couldn't start the batch.");
@@ -172,18 +206,29 @@ export function ScanUploadForm() {
         htmlFor="scan-files"
         className="flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-border bg-card px-6 py-10 text-center hover:border-primary/40"
       >
-        <span className="text-sm font-medium text-foreground">Choose photos or scanned images</span>
-        <span className="mt-1 text-xs text-muted-foreground">JPG, PNG, TIFF, HEIC — any common format</span>
+        <span className="text-sm font-medium text-foreground">Choose photos, scanned images, or a PDF</span>
+        <span className="mt-1 text-xs text-muted-foreground">
+          JPG, PNG, TIFF, HEIC, or a multi-page PDF from a copier/scanner
+        </span>
         <input
           ref={inputRef}
           id="scan-files"
           type="file"
-          accept="image/*"
+          accept="image/*,application/pdf"
           multiple
           className="sr-only"
           onChange={(e) => handleFilesSelected(e.target.files)}
         />
       </label>
+
+      {preparing && (
+        <div className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="size-4 animate-spin text-primary" aria-hidden />
+          <span>
+            Preparing &ldquo;{preparing.fileName}&rdquo; ({preparing.index} of {preparing.total})…
+          </span>
+        </div>
+      )}
 
       {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
 

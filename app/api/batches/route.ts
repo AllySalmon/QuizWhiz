@@ -4,10 +4,6 @@ import { createBatch } from "@/lib/db/queries/batches";
 
 export const runtime = "nodejs";
 
-// Milestone 1b scope note: image uploads only (JPG/PNG) — the PRD also
-// describes PDF batch upload with server-side page-splitting, which isn't
-// built yet (it needs a PDF rasterization library, a separate piece of
-// scope not covered by this pass). sourceType is always "photo" for now.
 export async function POST(request: Request) {
   const supabase = await createClient();
   const {
@@ -18,7 +14,7 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json();
-  const { label, itemCount } = body;
+  const { label, itemCount, sourceType } = body;
 
   if (typeof label !== "string" || !label.trim()) {
     return NextResponse.json({ ok: false, error: "Missing batch label." }, { status: 400 });
@@ -26,7 +22,10 @@ export async function POST(request: Request) {
   if (!Number.isInteger(itemCount) || itemCount < 1) {
     return NextResponse.json({ ok: false, error: "Missing item count." }, { status: 400 });
   }
+  if (sourceType !== "photo" && sourceType !== "pdf") {
+    return NextResponse.json({ ok: false, error: "Missing or invalid sourceType." }, { status: 400 });
+  }
 
-  const batch = await createBatch({ label, sourceType: "photo", itemCount });
+  const batch = await createBatch({ label, sourceType, itemCount });
   return NextResponse.json({ ok: true, batch });
 }
