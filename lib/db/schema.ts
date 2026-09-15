@@ -57,9 +57,15 @@ export const studentRoster = pgTable("student_roster", {
 // Malformed/unknown-teacher rows are skipped and summarized for the librarian, not fatal to the batch.
 
 // 2.3 answer_keys
+// user_id: added nullable here on purpose — Drizzle doesn't model the
+// auth.users FK, the NOT NULL constraint, the auth.uid() default, or RLS
+// (all applied by hand in supabase/answer-keys-rls.sql, same precedent as
+// storage-setup.sql) so drizzle-kit never has to reason about the auth
+// schema. Backfilled to the real dev account before the NOT NULL lands.
 export const answerKeys = pgTable("answer_keys", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  quizCode: text("quiz_code").notNull().unique(), // printed on the physical sheet
+  userId: uuid("user_id"),
+  quizCode: text("quiz_code").notNull().unique(), // printed on the physical sheet — stays globally unique for now, see supabase/answer-keys-rls.sql
   bookTitle: text("book_title").notNull(),
   gradeBand: gradeBandEnum("grade_band").notNull(),
   questionCount: integer("question_count").notNull(),
@@ -75,6 +81,7 @@ export const answerKeyQuestions = pgTable(
     answerKeyId: uuid("answer_key_id")
       .notNull()
       .references(() => answerKeys.id),
+    userId: uuid("user_id"), // same treatment as answerKeys.userId above
     questionNumber: integer("question_number").notNull(),
     correctAnswer: answerEnum("correct_answer").notNull(),
   },

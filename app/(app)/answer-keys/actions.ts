@@ -27,9 +27,12 @@ function readQuestions(formData: FormData, count: number) {
 }
 
 // Postgres unique_violation — see the answer_keys.quiz_code unique constraint
-// (Docs/5-Backend-Schema.md §2.3). drizzle-orm/postgres-js wraps the actual
-// PostgresError inside `.cause`, not on the thrown error itself — the code
-// lives at error.cause.code, confirmed against a live duplicate-insert.
+// (Docs/5-Backend-Schema.md §2.3). Two different error shapes land here now
+// that lib/db/queries/answerKeys.ts queries via the Supabase client instead
+// of Drizzle: a thrown PostgrestError has `.code` directly on it (the first
+// check below), while any other Drizzle-based path in this app still wraps
+// the real PostgresError inside `.cause` (the second check) — both handled,
+// confirmed against a live duplicate-insert through the new code path.
 function hasErrorCode(value: unknown, code: string): boolean {
   return typeof value === "object" && value !== null && "code" in value && value.code === code;
 }
