@@ -2,6 +2,7 @@ import Link from "next/link";
 import { AlertTriangle } from "lucide-react";
 import { listGradingReviewQueue } from "@/lib/db/queries/testRecords";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { DuplicateBadge } from "@/components/DuplicateBadge";
 import { ReviewTabs } from "../ReviewTabs";
 
 export default async function GradingReviewPage({
@@ -42,15 +43,18 @@ export default async function GradingReviewPage({
                   <TableCell className="text-foreground">{item.bookTitle ?? item.quizCode ?? "—"}</TableCell>
                   <TableCell className="font-mono text-sm">{item.studentNumber ?? "—"}</TableCell>
                   <TableCell className="text-sm text-muted-foreground">
-                    <span className="flex items-center gap-1.5">
-                      {item.isEscalated && (
-                        <span className="flex items-center gap-1 text-xs font-medium text-destructive">
-                          <AlertTriangle className="size-3.5" aria-hidden />
-                          Escalated
-                        </span>
-                      )}
-                      {describeFlags(item.flagReasons as string[])}
-                    </span>
+                    <div className="flex flex-col gap-1">
+                      <span className="flex items-center gap-1.5">
+                        {item.isEscalated && (
+                          <span className="flex items-center gap-1 text-xs font-medium text-destructive">
+                            <AlertTriangle className="size-3.5" aria-hidden />
+                            Escalated
+                          </span>
+                        )}
+                        {describeFlags(item.flagReasons as string[])}
+                      </span>
+                      {item.isDuplicate && <DuplicateBadge />}
+                    </div>
                   </TableCell>
                   <TableCell className="text-right">
                     <Link

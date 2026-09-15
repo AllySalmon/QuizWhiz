@@ -138,20 +138,43 @@ async function Dashboard() {
   );
 }
 
+// Hover treatment matches the header nav's blue + "pop" (app/(app)/layout.tsx).
 function StatCard({ label, value, href }: { label: string; value: string; href?: string }) {
   const card = (
-    <Card className={href ? "transition-colors hover:border-primary/40" : undefined}>
+    <Card
+      className={
+        href
+          ? "transition-all duration-150 hover:-translate-y-1 hover:scale-105 hover:border-primary/40 hover:shadow-md"
+          : undefined
+      }
+    >
       <CardHeader>
-        <CardTitle className="text-sm font-medium text-muted-foreground">{label}</CardTitle>
+        <CardTitle
+          className={
+            href
+              ? "text-sm font-medium text-muted-foreground transition-colors group-hover:text-primary"
+              : "text-sm font-medium text-muted-foreground"
+          }
+        >
+          {label}
+        </CardTitle>
       </CardHeader>
       <CardContent>
-        <span className="text-2xl font-semibold text-foreground">{value}</span>
+        <span
+          className={
+            href
+              ? "text-2xl font-semibold text-foreground transition-colors group-hover:text-primary"
+              : "text-2xl font-semibold text-foreground"
+          }
+        >
+          {value}
+        </span>
       </CardContent>
     </Card>
   );
 
   return href ? (
-    <Link href={href} className="block">
+    <Link href={href} className="group block">
       {card}
     </Link>
   ) : (

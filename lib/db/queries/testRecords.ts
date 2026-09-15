@@ -43,6 +43,29 @@ export async function getTestRecordsByIds(ids: string[]) {
   return db.select().from(testRecords).where(inArray(testRecords.id, ids)).orderBy(asc(testRecords.scanOrder));
 }
 
+// Non-blocking duplicate warning: another test_records row exists with the
+// same student number + quiz code. Computed on read (not stored) so it
+// self-corrects the moment either record is deleted — same treatment as
+// the escalation flag below. Doesn't touch gradingStatus/assignmentStatus;
+// a would-be-clean test stays clean, just carries this as extra visible
+// context wherever it's listed. A re-scan can be a genuine retake, so this
+// is advisory, not routed into a review queue.
+// Table-qualified on purpose (not ${testRecords.studentNumber}-style
+// interpolation): inside a correlated subquery, Drizzle renders those
+// unqualified when there's no join in the outer query, which is ambiguous
+// against the subquery's own same-named columns and gets resolved to the
+// wrong (inner) row — confirmed live, see the fix commit for the repro.
+const POSSIBLE_DUPLICATE = sql<boolean>`(
+  test_records.student_number is not null
+  AND test_records.quiz_code is not null
+  AND EXISTS (
+    SELECT 1 FROM test_records dup
+    WHERE dup.student_number = test_records.student_number
+      AND dup.quiz_code = test_records.quiz_code
+      AND dup.id <> test_records.id
+  )
+)`;
+
 const queueSelection = {
   id: testRecords.id,
   batchId: testRecords.batchId,
@@ -61,6 +84,7 @@ const queueSelection = {
   flagReasons: testRecords.flagReasons,
   scanImageRef: testRecords.scanImageRef,
   createdAt: testRecords.createdAt,
+  isDuplicate: POSSIBLE_DUPLICATE,
 };
 
 // Every test in a batch, regardless of status — the "what actually

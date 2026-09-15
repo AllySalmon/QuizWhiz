@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { DuplicateBadge } from "@/components/DuplicateBadge";
 
 type TestRecordRow = {
   id: string;
@@ -19,6 +20,7 @@ type TestRecordRow = {
   passed: boolean | null;
   gradingStatus: "clean" | "needs_grading_review" | "resolved";
   assignmentStatus: "clean" | "needs_assignment_review" | "resolved";
+  isDuplicate: boolean;
 };
 
 export function BatchTestRecordsTable({ batchId, records }: { batchId: string; records: TestRecordRow[] }) {
@@ -98,7 +100,10 @@ export function BatchTestRecordsTable({ batchId, records }: { batchId: string; r
                   )}
                 </TableCell>
                 <TableCell>
-                  <StatusBadge gradingStatus={r.gradingStatus} assignmentStatus={r.assignmentStatus} />
+                  <div className="flex flex-col gap-0.5">
+                    <StatusBadge gradingStatus={r.gradingStatus} assignmentStatus={r.assignmentStatus} />
+                    {r.isDuplicate && <DuplicateBadge />}
+                  </div>
                 </TableCell>
                 <TableCell className="text-right">
                   <Link

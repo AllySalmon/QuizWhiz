@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { listAssignmentReviewQueue } from "@/lib/db/queries/testRecords";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { DuplicateBadge } from "@/components/DuplicateBadge";
 import { ReviewTabs } from "../ReviewTabs";
 
 export default async function AssignmentReviewPage({
@@ -44,7 +45,10 @@ export default async function AssignmentReviewPage({
                   <TableCell className="font-mono text-sm">{item.studentNumber ?? "—"}</TableCell>
                   <TableCell className="text-sm">{item.ocrTeacherLastName ?? "—"}</TableCell>
                   <TableCell className="text-sm text-muted-foreground">
-                    {describeFlags(item.flagReasons as string[])}
+                    <div className="flex flex-col gap-1">
+                      <span>{describeFlags(item.flagReasons as string[])}</span>
+                      {item.isDuplicate && <DuplicateBadge />}
+                    </div>
                   </TableCell>
                   <TableCell className="text-right">
                     <Link

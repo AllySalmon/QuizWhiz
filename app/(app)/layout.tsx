@@ -39,7 +39,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               <Link
                 key={link.href}
                 href={link.href}
-                className="text-sm font-medium whitespace-nowrap text-muted-foreground hover:text-foreground"
+                className="inline-block text-sm font-medium whitespace-nowrap text-muted-foreground transition-all duration-150 hover:scale-110 hover:font-semibold hover:text-primary"
               >
                 {link.label}
               </Link>
@@ -51,7 +51,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             <form action={signOut}>
               <button
                 type="submit"
-                className="text-sm font-medium text-muted-foreground hover:text-foreground"
+                className="inline-block text-sm font-medium text-muted-foreground transition-all duration-150 hover:scale-110 hover:font-semibold hover:text-primary"
               >
                 Sign out
               </button>

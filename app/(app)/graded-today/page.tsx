@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { listGradedToday } from "@/lib/db/queries/testRecords";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { DuplicateBadge } from "@/components/DuplicateBadge";
 
 export default async function GradedTodayPage() {
   const records = await listGradedToday();
@@ -46,7 +47,10 @@ export default async function GradedTodayPage() {
                     )}
                   </TableCell>
                   <TableCell>
-                    <StatusBadge gradingStatus={r.gradingStatus} assignmentStatus={r.assignmentStatus} />
+                    <div className="flex flex-col gap-0.5">
+                      <StatusBadge gradingStatus={r.gradingStatus} assignmentStatus={r.assignmentStatus} />
+                      {r.isDuplicate && <DuplicateBadge />}
+                    </div>
                   </TableCell>
                   <TableCell className="text-right">
                     <Link href={`/batches/${r.batchId}`} className="text-sm font-medium text-primary hover:underline">
