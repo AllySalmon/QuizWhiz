@@ -35,6 +35,11 @@ export function StudentForm({ mode, action, teachers, initial }: Props) {
           required
           className={mode === "edit" ? "cursor-not-allowed bg-input/50 opacity-50" : undefined}
         />
+        {/* Docs/8-Pivot-Addendum.md §9.4 — the "student number, never a name"
+            design assumed a school context where real ID numbers already
+            existed; a fresh public signup has no such system, so this needs
+            to be said explicitly, right where someone's about to type one. */}
+        <p className="text-xs text-muted-foreground">Use a made-up number, not a real name or ID.</p>
       </div>
 
       <div className="grid grid-cols-2 gap-4">

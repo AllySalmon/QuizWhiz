@@ -20,7 +20,8 @@ export function CsvImportForm() {
         <code className="rounded bg-muted px-1 py-0.5">grade_band</code> (
         <code className="rounded bg-muted px-1 py-0.5">jr</code> or{" "}
         <code className="rounded bg-muted px-1 py-0.5">3-5</code>). Existing student numbers get their
-        teacher updated; new ones are added. Nothing is deleted.
+        teacher updated; new ones are added. Nothing is deleted. Use made-up student numbers, not
+        real names or IDs.
       </p>
 
       <form

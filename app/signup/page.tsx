@@ -77,6 +77,17 @@ export default function SignUpPage() {
             Sign in
           </Link>
         </p>
+
+        {/* Docs/8-Pivot-Addendum.md §9.4 — the short form of the demo/data
+            disclaimer, shown before anyone commits an email. The full
+            version, with the per-account isolation specific, lives in
+            Settings (app/(app)/settings/page.tsx) for anyone who wants more
+            detail once signed in. */}
+        <p className="mt-4 text-center text-xs text-zinc-400">
+          QuizWhiz is a free portfolio demo, not a committed ongoing service — data isn&apos;t
+          guaranteed to persist. We store the email you sign up with and whatever you type into
+          the app.
+        </p>
       </div>
     </div>
   );
