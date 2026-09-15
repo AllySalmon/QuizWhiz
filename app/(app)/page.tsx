@@ -3,8 +3,15 @@ import { CheckCircle2, Circle, AlertTriangle } from "lucide-react";
 import { answerKeysExist } from "@/lib/db/queries/answerKeys";
 import { teachersExist } from "@/lib/db/queries/teachers";
 import { studentRosterExists } from "@/lib/db/queries/studentRoster";
-import { dashboardCounts, countEscalatedGradingReview, countPossibleDuplicates } from "@/lib/db/queries/testRecords";
-import { countOutstandingBookReports, countEscalatedBookReports } from "@/lib/db/queries/bookReports";
+import {
+  dashboardCounts,
+  countEscalatedGradingReview,
+  countPossibleDuplicates,
+} from "@/lib/db/queries/testRecords";
+import {
+  countOutstandingBookReports,
+  countEscalatedBookReports,
+} from "@/lib/db/queries/bookReports";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
@@ -54,7 +61,9 @@ function SetupChecklist({
 
   return (
     <div className="mx-auto max-w-lg">
-      <h1 className="text-2xl font-semibold tracking-tight text-foreground">Let&apos;s get set up</h1>
+      <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+        Let&apos;s get set up
+      </h1>
       <p className="mt-1 text-sm text-muted-foreground">
         {doneCount} of {items.length} set up
         {nextItem ? ` — ${nextItem.label.toLowerCase()} to finish` : ""}.
@@ -68,9 +77,15 @@ function SetupChecklist({
             className="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-4 transition-colors hover:border-primary/40"
           >
             {item.done ? (
-              <CheckCircle2 className="size-5 shrink-0 text-primary" aria-hidden />
+              <CheckCircle2
+                className="size-5 shrink-0 text-primary"
+                aria-hidden
+              />
             ) : (
-              <Circle className="size-5 shrink-0 text-muted-foreground" aria-hidden />
+              <Circle
+                className="size-5 shrink-0 text-muted-foreground"
+                aria-hidden
+              />
             )}
             <span
               className={
@@ -89,40 +104,59 @@ function SetupChecklist({
 }
 
 async function Dashboard() {
-  const [counts, outstandingReports, escalatedGradingReview, escalatedBookReports, possibleDuplicates] =
-    await Promise.all([
-      dashboardCounts(),
-      countOutstandingBookReports(),
-      countEscalatedGradingReview(),
-      countEscalatedBookReports(),
-      countPossibleDuplicates(),
-    ]);
+  const [
+    counts,
+    outstandingReports,
+    escalatedGradingReview,
+    escalatedBookReports,
+    possibleDuplicates,
+  ] = await Promise.all([
+    dashboardCounts(),
+    countOutstandingBookReports(),
+    countEscalatedGradingReview(),
+    countEscalatedBookReports(),
+    countPossibleDuplicates(),
+  ]);
 
   return (
     <div>
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold tracking-tight text-foreground">Home</h1>
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+          Home
+        </h1>
         <Button render={<Link href="/scan">Scan &amp; Upload</Link>} />
       </div>
 
       {escalatedGradingReview > 0 && (
         <div className="mt-4 flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-foreground">
-          <AlertTriangle className="size-4 shrink-0 text-destructive" aria-hidden />
+          <AlertTriangle
+            className="size-4 shrink-0 text-destructive"
+            aria-hidden
+          />
           <span>
-            {escalatedGradingReview} quiz code{escalatedGradingReview === 1 ? "" : "s"} in Grading
-            Review {escalatedGradingReview === 1 ? "has" : "have"} been unresolved for 2+ weeks —
-            add the missing answer key, or remove the scan.
+            {escalatedGradingReview} quiz code
+            {escalatedGradingReview === 1 ? "" : "s"} in Grading Review{" "}
+            {escalatedGradingReview === 1 ? "has" : "have"} been unresolved for
+            2+ weeks — add the missing answer key, or remove the scan.
           </span>
         </div>
       )}
 
       {escalatedBookReports > 0 && (
         <div className="mt-4 flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-foreground">
-          <AlertTriangle className="size-4 shrink-0 text-destructive" aria-hidden />
+          <AlertTriangle
+            className="size-4 shrink-0 text-destructive"
+            aria-hidden
+          />
           <span>
-            {escalatedBookReports} book report{escalatedBookReports === 1 ? "" : "s"}{" "}
-            {escalatedBookReports === 1 ? "has" : "have"} been outstanding for 2+ weeks —{" "}
-            <Link href="/book-reports" className="font-medium underline underline-offset-2">
+            {escalatedBookReports} book report
+            {escalatedBookReports === 1 ? "" : "s"}{" "}
+            {escalatedBookReports === 1 ? "has" : "have"} been outstanding for
+            2+ weeks —{" "}
+            <Link
+              href="/book-reports"
+              className="font-medium underline underline-offset-2"
+            >
               view Book Reports
             </Link>
             .
@@ -131,18 +165,46 @@ async function Dashboard() {
       )}
 
       <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <StatCard label="Graded Today" value={String(counts.gradedToday)} href="/graded-today" />
-        <StatCard label="Grading Review" value={String(counts.gradingReview)} href="/review/grading" />
-        <StatCard label="Needs Review" value={String(counts.assignmentReview)} href="/review/assignment" />
-        <StatCard label="Outstanding Reports" value={String(outstandingReports)} href="/book-reports" />
-        <StatCard label="Possible Duplicates" value={String(possibleDuplicates)} href="/duplicates" />
+        <StatCard
+          label="Graded Today"
+          value={String(counts.gradedToday)}
+          href="/graded-today"
+        />
+        <StatCard
+          label="Grading Review"
+          value={String(counts.gradingReview)}
+          href="/review/grading"
+        />
+        <StatCard
+          label="Needs Review"
+          value={String(counts.assignmentReview)}
+          href="/review/assignment"
+        />
+        <StatCard
+          label="Outstanding Book Reports"
+          value={String(outstandingReports)}
+          href="/book-reports"
+        />
+        <StatCard
+          label="Possible Duplicates"
+          value={String(possibleDuplicates)}
+          href="/duplicates"
+        />
       </div>
     </div>
   );
 }
 
 // Hover treatment matches the header nav's blue + "pop" (app/(app)/layout.tsx).
-function StatCard({ label, value, href }: { label: string; value: string; href?: string }) {
+function StatCard({
+  label,
+  value,
+  href,
+}: {
+  label: string;
+  value: string;
+  href?: string;
+}) {
   const card = (
     <Card
       className={
