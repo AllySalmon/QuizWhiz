@@ -5,8 +5,9 @@ import { createClient } from "@/lib/supabase/server";
 
 export type SignInState = { error: string | null };
 
-// Single account, no self-service signup (Docs/2-App-Flow.md §4.1) — the
-// account is provisioned once, out of band, via the Supabase dashboard.
+// Self-serve signup now exists (app/signup/, Docs/8-Pivot-Addendum.md §9.2) —
+// this supersedes the original single-account-only decision (Docs/2-App-Flow.md
+// §4.1). Any number of independent, RLS-isolated accounts can sign in here.
 export async function signIn(_prevState: SignInState, formData: FormData): Promise<SignInState> {
   const email = formData.get("email");
   const password = formData.get("password");

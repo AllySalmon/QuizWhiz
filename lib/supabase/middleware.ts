@@ -2,7 +2,9 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 // Refreshes the auth session on every request and redirects to /login when
-// there's no session. Single-user app — no role checks, just "logged in or not."
+// there's no session. Any number of independent accounts can exist now
+// (app/signup/ — Docs/8-Pivot-Addendum.md §9.2), each fully isolated by RLS;
+// this gate is still just "logged in or not," no role checks.
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({ request });
 
@@ -29,10 +31,11 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const isLoginRoute = request.nextUrl.pathname.startsWith("/login");
+  const isAuthRoute =
+    request.nextUrl.pathname.startsWith("/login") || request.nextUrl.pathname.startsWith("/signup");
   const isPublicAsset = request.nextUrl.pathname.startsWith("/_next");
 
-  if (!user && !isLoginRoute && !isPublicAsset) {
+  if (!user && !isAuthRoute && !isPublicAsset) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);
