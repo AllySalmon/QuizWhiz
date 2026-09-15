@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { readTestSheet } from "@/lib/anthropic/testSheetRead";
 import { createClient } from "@/lib/supabase/server";
+import { checkAndConsumeAiUsage } from "@/lib/grading/aiUsageCap";
 
 export const runtime = "nodejs";
 
@@ -31,6 +32,13 @@ export async function POST(request: Request) {
 
   if (!user) {
     return NextResponse.json({ ok: false, error: "Not authenticated." }, { status: 401 });
+  }
+
+  // Shares the same daily pool as process-image/route.ts and pilot/compare-image/route.ts
+  // — one cap across every route that calls the Claude API (Docs/8-Pivot-Addendum.md §9.3).
+  const usage = await checkAndConsumeAiUsage();
+  if (!usage.allowed) {
+    return NextResponse.json({ ok: false, error: usage.message }, { status: 429 });
   }
 
   try {

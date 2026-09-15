@@ -193,6 +193,15 @@ export const bookReports = pgTable(
 // 2.8 users — intentionally omitted here. The librarian's single login is
 // managed by Supabase Auth (auth.users), not a hand-rolled table.
 
+// 2.10 ai_usage_daily — intentionally omitted here too, unlike every other
+// table in this file. It's created entirely by hand-written SQL
+// (supabase/ai-usage-cap.sql), never touched by drizzle-kit at all (not
+// even a nullable-column migration), because nothing ever queries it via
+// Drizzle — only the increment_and_check_ai_usage() RPC in that same file
+// reads/writes it. Adding a pgTable() here would make drizzle-kit think
+// it's an undiscovered table and try to generate a CREATE TABLE migration
+// for something that already exists live.
+
 // 2.9 audit_log — cheap insurance since roster edits can retroactively affect history
 // user_id: same treatment as answerKeys.userId above — denormalized so a
 // correction's audit trail is tenant-scoped too, not just the record itself.

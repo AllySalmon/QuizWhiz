@@ -8,6 +8,7 @@ import { createRunItem } from "@/lib/db/queries/comparisonRuns";
 import { compareResult } from "@/lib/grading/compareResult";
 import type { GroundTruthRow } from "@/lib/csv/groundTruthImport";
 import { normalizeImageBuffer } from "@/lib/media/serverNormalize";
+import { checkAndConsumeAiUsage } from "@/lib/grading/aiUsageCap";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -26,6 +27,13 @@ export async function POST(request: Request) {
   } = await supabase.auth.getUser();
   if (!user) {
     return NextResponse.json({ ok: false, error: "Not authenticated." }, { status: 401 });
+  }
+
+  // Shares the same daily pool as process-image/route.ts and test-read/route.ts
+  // — one cap across every route that calls the Claude API (Docs/8-Pivot-Addendum.md §9.3).
+  const usage = await checkAndConsumeAiUsage();
+  if (!usage.allowed) {
+    return NextResponse.json({ ok: false, error: usage.message }, { status: 429 });
   }
 
   try {

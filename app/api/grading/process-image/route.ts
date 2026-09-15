@@ -9,6 +9,7 @@ import { getTeacher } from "@/lib/db/queries/teachers";
 import { createTestRecord, maybeDeleteScanImage } from "@/lib/db/queries/testRecords";
 import { scoreTest } from "@/lib/grading/scoreTest";
 import { normalizeImageBuffer } from "@/lib/media/serverNormalize";
+import { checkAndConsumeAiUsage } from "@/lib/grading/aiUsageCap";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -31,6 +32,14 @@ export async function POST(request: Request) {
   } = await supabase.auth.getUser();
   if (!user) {
     return NextResponse.json({ ok: false, error: "Not authenticated." }, { status: 401 });
+  }
+
+  // Checked before any image work or the Claude call itself — a rejected
+  // request never uploads a scan or spends a token (Docs/8-Pivot-Addendum.md
+  // §9.3).
+  const usage = await checkAndConsumeAiUsage();
+  if (!usage.allowed) {
+    return NextResponse.json({ ok: false, error: usage.message }, { status: 429 });
   }
 
   try {
