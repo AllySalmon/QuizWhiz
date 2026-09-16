@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useActionState } from "react";
 import { signUp, type SignUpState } from "./actions";
 
@@ -12,8 +13,10 @@ export default function SignUpPage() {
   return (
     <div className="flex flex-1 items-center justify-center bg-zinc-50 px-4">
       <div className="w-full max-w-sm rounded-2xl border border-zinc-200 bg-white p-8 shadow-sm">
-        <h1 className="text-xl font-semibold tracking-tight text-zinc-900">QuizWhiz</h1>
-        <p className="mt-1 text-sm text-zinc-500">Create an account to get started.</p>
+        <div className="flex flex-col items-center text-center">
+          <Image src="/quizwhiz-full-logo.png" alt="QuizWhiz" width={210} height={171} priority />
+          <p className="mt-1 text-sm text-zinc-500">Create an account to get started.</p>
+        </div>
 
         <form action={formAction} className="mt-6 flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">

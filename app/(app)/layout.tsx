@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { Search } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "../login/actions";
@@ -33,7 +34,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             is a narrow-viewport fallback only; whitespace-nowrap keeps
             labels from breaking mid-word if that ever kicks in. */}
         <div className="mx-auto grid max-w-7xl grid-cols-[auto_1fr_auto] items-center gap-x-4 px-6 py-4">
-          <span className="text-sm font-semibold whitespace-nowrap text-foreground">QuizWhiz</span>
+          <span className="flex items-center gap-1 whitespace-nowrap text-sm font-semibold text-foreground">
+            <Image src="/quizwhiz-logo.png" alt="" width={24} height={24} />
+            QuizWhiz
+          </span>
 
           <nav className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
             {NAV_LINKS.map((link) => (
