@@ -21,6 +21,9 @@ create table if not exists ai_usage_daily (
 
 alter table ai_usage_daily enable row level security;
 
+-- Self-host Phase 1 (Docs/8-Pivot-Addendum.md §7): guarded so
+-- scripts/setup-database.ts can safely run this on every build.
+drop policy if exists "owner has full access" on ai_usage_daily;
 create policy "owner has full access" on ai_usage_daily
   for all
   using (user_id = auth.uid())

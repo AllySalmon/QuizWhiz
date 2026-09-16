@@ -19,32 +19,57 @@
 -- Real constraint names confirmed live via pg_constraint before writing
 -- this file, not assumed from Postgres's default naming convention.
 
-alter table teachers
-  alter column user_id set not null,
-  add constraint teachers_user_id_fkey foreign key (user_id) references auth.users(id) on delete cascade,
-  alter column user_id set default auth.uid();
+-- Self-host Phase 1 (Docs/8-Pivot-Addendum.md §7): made idempotent so
+-- scripts/setup-database.ts can safely run this on every build, not just
+-- the first — see answer-keys-rls.sql for the same treatment applied first.
+-- The student_roster PK swap and the quiz_code unique-constraint swap are
+-- also guarded: Postgres names a plain `add primary key` after the table
+-- (student_roster_pkey) regardless of which columns compose it, so a second
+-- run's drop+recreate would already be a functional no-op even unguarded —
+-- `if exists` is added anyway rather than relying on that naming detail.
+
+alter table teachers alter column user_id set not null;
+do $$ begin
+  alter table teachers add constraint teachers_user_id_fkey foreign key (user_id) references auth.users(id) on delete cascade;
+exception when duplicate_object then null;
+end $$;
+alter table teachers alter column user_id set default auth.uid();
 
 alter table teachers enable row level security;
 
+drop policy if exists "owner has full access" on teachers;
 create policy "owner has full access" on teachers
   for all
   using (user_id = auth.uid())
   with check (user_id = auth.uid());
 
-alter table student_roster
-  alter column user_id set not null,
-  add constraint student_roster_user_id_fkey foreign key (user_id) references auth.users(id) on delete cascade,
-  alter column user_id set default auth.uid();
+alter table student_roster alter column user_id set not null;
+do $$ begin
+  alter table student_roster add constraint student_roster_user_id_fkey foreign key (user_id) references auth.users(id) on delete cascade;
+exception when duplicate_object then null;
+end $$;
+alter table student_roster alter column user_id set default auth.uid();
 
-alter table student_roster drop constraint student_roster_pkey;
+alter table student_roster drop constraint if exists student_roster_pkey;
 alter table student_roster add primary key (user_id, student_number);
 
 alter table student_roster enable row level security;
 
+drop policy if exists "owner has full access" on student_roster;
 create policy "owner has full access" on student_roster
   for all
   using (user_id = auth.uid())
   with check (user_id = auth.uid());
 
-alter table answer_keys drop constraint answer_keys_quiz_code_unique;
-alter table answer_keys add constraint answer_keys_user_id_quiz_code_unique unique (user_id, quiz_code);
+alter table answer_keys drop constraint if exists answer_keys_quiz_code_unique;
+-- A unique constraint raises duplicate_table (42P07), not duplicate_object
+-- (42710) like the foreign key constraints above — Postgres implements a
+-- unique constraint as a same-named index under the hood, so the "already
+-- exists" error is about that relation, not treated as a duplicate object.
+-- Confirmed by actually re-running this file against the live database,
+-- not assumed: a duplicate_object-only handler here failed the first time.
+do $$ begin
+  alter table answer_keys add constraint answer_keys_user_id_quiz_code_unique unique (user_id, quiz_code);
+exception when duplicate_object then null;
+when duplicate_table then null;
+end $$;

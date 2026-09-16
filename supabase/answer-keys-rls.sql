@@ -14,18 +14,29 @@
 -- sites are still correct only because a value-match can resolve to exactly
 -- one row today. Relaxing that waits for those join sites to be scoped too.
 
-alter table answer_keys
-  alter column user_id set not null,
-  add constraint answer_keys_user_id_fkey foreign key (user_id) references auth.users(id) on delete cascade,
-  alter column user_id set default auth.uid();
+-- Self-host Phase 1 (Docs/8-Pivot-Addendum.md §7): made idempotent so
+-- scripts/setup-database.ts can safely run this on every build, not just
+-- the first. alter column set not null/set default and enable row level
+-- security are already no-ops on a second run; add constraint and create
+-- policy are not, guarded below.
 
-alter table answer_key_questions
-  alter column user_id set not null,
-  add constraint answer_key_questions_user_id_fkey foreign key (user_id) references auth.users(id) on delete cascade,
-  alter column user_id set default auth.uid();
+alter table answer_keys alter column user_id set not null;
+do $$ begin
+  alter table answer_keys add constraint answer_keys_user_id_fkey foreign key (user_id) references auth.users(id) on delete cascade;
+exception when duplicate_object then null;
+end $$;
+alter table answer_keys alter column user_id set default auth.uid();
+
+alter table answer_key_questions alter column user_id set not null;
+do $$ begin
+  alter table answer_key_questions add constraint answer_key_questions_user_id_fkey foreign key (user_id) references auth.users(id) on delete cascade;
+exception when duplicate_object then null;
+end $$;
+alter table answer_key_questions alter column user_id set default auth.uid();
 
 alter table answer_keys enable row level security;
 
+drop policy if exists "owner has full access" on answer_keys;
 create policy "owner has full access" on answer_keys
   for all
   using (user_id = auth.uid())
@@ -33,6 +44,7 @@ create policy "owner has full access" on answer_keys
 
 alter table answer_key_questions enable row level security;
 
+drop policy if exists "owner has full access" on answer_key_questions;
 create policy "owner has full access" on answer_key_questions
   for all
   using (user_id = auth.uid())

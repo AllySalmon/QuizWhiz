@@ -1,16 +1,20 @@
 # QuizWhiz
 
-SSYRA reading-quiz grading tool for the school librarian. See `Docs/` for the
-full product spec — `Docs/1-PRD.md` is the source of truth if anything here
-ever seems to conflict with it.
+Scan a stack of paper multiple-choice reading quizzes, get instant AI-assisted grading and per-teacher reports. Built originally for a school librarian's SSYRA reading-quiz program; broadened to a general "grade circled-answer tests" tool for homeschool parents, classroom teachers, and coaches. See `Docs/` for the full product spec — `Docs/1-PRD.md` and `Docs/8-Pivot-Addendum.md` are the source of truth if anything here ever seems to conflict with them.
 
-## Status
+**Live demo:** [quizwhiz-ashen.vercel.app](https://quizwhiz-ashen.vercel.app) — public, signed-up accounts are fully isolated from each other, but this is a portfolio demo, not a persistent service.
 
-Milestone 0 (infra scaffold) — see `Docs/6-Implementation-Plan.md` §2.
+## Deploy your own instance
 
-## One-time setup (steps that need your own credentials)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/clone?repository-url=https%3A%2F%2Fgithub.com%2FAllySalmon%2FQuizWhiz&env=ANTHROPIC_API_KEY&envDescription=Your%20Anthropic%20API%20key%2C%20used%20to%20read%20and%20grade%20scanned%20tests.%20Get%20one%20at%20console.anthropic.com.&envLink=https%3A%2F%2Fconsole.anthropic.com%2Fsettings%2Fkeys&project-name=quizwhiz&repository-name=quizwhiz&stores=%5B%7B%22type%22%3A%22integration%22%2C%22integrationSlug%22%3A%22supabase%22%2C%22productSlug%22%3A%22supabase%22%7D%5D)
 
-These can't be scripted — they need your Supabase/Anthropic/Vercel accounts.
+This is the fast path for a real, single-tenant deployment of your own — it provisions a fresh Supabase project automatically via Vercel's native Supabase integration, and runs the full database migration and storage bucket setup on first build (`scripts/setup-database.ts`) — no manual SQL, no CLI migration command. The one thing that can't be automated is your own [Anthropic API key](https://console.anthropic.com/settings/keys), which you'll be prompted for during the deploy flow.
+
+Every deployment is single-tenant: the first person to sign in claims the instance as its owner, and signup closes after that. This is separate from the public demo above, which stays open to anyone. A full step-by-step guide with screenshots, for a non-technical reader, is planned as a later addition — for now, this button plus the manual walkthrough below (if you want to understand what it's doing, or run it locally instead) are the available paths.
+
+## Manual / local development setup
+
+Useful if you're contributing to the codebase itself, rather than just deploying your own instance — the button above does all of this for you automatically.
 
 ### 1. Supabase project
 
@@ -18,42 +22,29 @@ These can't be scripted — they need your Supabase/Anthropic/Vercel accounts.
 2. Project Settings → API: copy the Project URL and the `anon` public key.
 3. Project Settings → API: copy the `service_role` key (server-only, never expose this to the browser).
 4. Project Settings → Database → Connect: **do not use the "Direct connection" tab** — that host (`db.<ref>.supabase.co`) is IPv6-only unless you pay for the IPv4 add-on, and fails with `ENOTFOUND` on most networks. Use the **Transaction pooler** and **Session pooler** tabs instead (both route through `aws-0-<region>.pooler.supabase.com` with username `postgres.<project-ref>`, which is IPv4-compatible).
-5. Paste all five into `.env.local` (copy `.env.local.example` first) — Transaction pooler goes in `DATABASE_URL` (app runtime), Session pooler goes in `DIRECT_URL` (migrations only; see `drizzle.config.ts` for why they're split).
+5. Paste everything into `.env.local` (copy `.env.local.example` first) — Transaction pooler goes in `DATABASE_URL` (app runtime), Session pooler goes in `DIRECT_URL` (migrations only; see `drizzle.config.ts` for why they're split).
 
-### 2. Database schema
+### 2. Database schema, RLS, and storage bucket
 
 ```bash
-npm run db:migrate
+npm run build
 ```
 
-This applies `lib/db/migrations/0000_*.sql` (generated from `lib/db/schema.ts`,
-which mirrors `Docs/5-Backend-Schema.md`). Re-run `npm run db:generate` after
-editing `lib/db/schema.ts` to produce a new migration.
+`scripts/setup-database.ts` runs automatically before `next build` — it applies every Drizzle migration in `lib/db/migrations/`, creates the private `scan-images` storage bucket (`public = false`; all access goes through the service-role client in `lib/supabase/admin.ts`, never the browser directly), and applies the RLS policies and RPC functions under `supabase/*.sql`. Safe to run repeatedly — it detects an already-configured database and exits immediately. Re-run `npm run db:generate` after editing `lib/db/schema.ts` to produce a new migration first.
 
-### 3. Storage bucket (private)
+For local iteration without a full build, `npm run db:migrate` applies just the Drizzle migrations on their own.
 
-In the Supabase SQL editor, run `supabase/storage-setup.sql`. This creates
-the `scan-images` bucket with `public = false` — per project decision, scan
-images are **never** publicly accessible. All access goes through the
-service-role client (`lib/supabase/admin.ts`) from server code only; the
-browser client never touches this bucket directly.
+### 3. Your own account
 
-### 4. Dev/test login
+Start the app (`npm run dev`) and sign up through `/signup` with your own email — the first real signup on a fresh instance becomes its owner, and signup closes after that (see `lib/auth/instanceClaimed.ts`).
 
-Supabase dashboard → Authentication → Users → Add user. **Use your own email
-for all Milestone 0/1 development and testing** — the librarian's real
-account isn't provisioned until we're ready for the soft launch
-(`Docs/6-Implementation-Plan.md` §5).
+### 4. Anthropic API key
 
-### 5. Anthropic API key
+Get a key from the [Anthropic Console](https://console.anthropic.com) and add it to `.env.local` as `ANTHROPIC_API_KEY`.
 
-Get a key from the [Anthropic Console](https://console.anthropic.com) and
-add it to `.env.local` as `ANTHROPIC_API_KEY`.
+### 5. Vercel (optional, for deploying your local changes)
 
-### 6. Vercel (optional for local dev)
-
-Connect this repo at [vercel.com/new](https://vercel.com/new), then add the
-same environment variables from `.env.local` in the Vercel project settings.
+Connect this repo at [vercel.com/new](https://vercel.com/new), then add the same environment variables from `.env.local` in the Vercel project settings — or use the native Supabase integration and let `lib/env.ts` resolve its variable names automatically.
 
 ## Local development
 
@@ -62,16 +53,7 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) — you'll be redirected
-to `/login`. Sign in with the dev account from step 4 above, then use the
-**"Run smoke test"** button on the home page to confirm the Claude vision
-pipeline works end to end (Milestone 0 exit criteria).
-
-The smoke test currently sends a blank placeholder image (no real scanned
-test sheet exists yet) — expect every field to come back null/low-confidence.
-That's correct for now; it's testing the pipeline, not read accuracy. Swap
-in a real scan later via the "image" field on `POST /api/grading/test-read`,
-or by replacing `public/sample-test-sheet-placeholder.png`.
+Open [http://localhost:3000](http://localhost:3000) — you'll be redirected to `/login` (or `/signup` if the instance isn't claimed yet).
 
 ## Other commands
 

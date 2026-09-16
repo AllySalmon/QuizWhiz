@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { isInstanceClaimed } from "@/lib/auth/instanceClaimed";
 
 export type SignUpState = { error: string | null };
 
@@ -13,6 +14,15 @@ const MIN_PASSWORD_LENGTH = 8;
 // email" to be off for the Email provider in the Supabase dashboard, or
 // signUp() below won't return a session and this redirect never fires.
 export async function signUp(_prevState: SignUpState, formData: FormData): Promise<SignUpState> {
+  const isDemoMode = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
+
+  // Defense in depth: app/signup/page.tsx already hides the form once a
+  // self-host instance is claimed, but a direct POST to this action would
+  // bypass that. Never checked in demo mode — see app/signup/page.tsx.
+  if (!isDemoMode && (await isInstanceClaimed())) {
+    return { error: "This instance already has an owner — sign in instead." };
+  }
+
   const email = formData.get("email");
   const password = formData.get("password");
   const confirmPassword = formData.get("confirmPassword");

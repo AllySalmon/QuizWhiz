@@ -1,97 +1,32 @@
-"use client";
-
 import Link from "next/link";
-import Image from "next/image";
-import { useActionState } from "react";
-import { signUp, type SignUpState } from "./actions";
+import { isInstanceClaimed } from "@/lib/auth/instanceClaimed";
+import { SignUpForm } from "./SignUpForm";
 
-const initialState: SignUpState = { error: null };
+// Self-host deployments restrict to one owner (Docs/8-Pivot-Addendum.md
+// §2-4, revisited) — the first real signup claims the instance, then this
+// closes. The public demo (NEXT_PUBLIC_DEMO_MODE set) keeps signup open
+// always; isInstanceClaimed() is never even called there. Same check is
+// repeated in actions.ts's signUp() as defense in depth against a direct
+// POST bypassing this page.
+export default async function SignUpPage() {
+  const isDemoMode = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
 
-export default function SignUpPage() {
-  const [state, formAction, pending] = useActionState(signUp, initialState);
-
-  return (
-    <div className="flex flex-1 items-center justify-center bg-zinc-50 px-4">
-      <div className="w-full max-w-sm rounded-2xl border border-zinc-200 bg-white p-8 shadow-sm">
-        <div className="flex flex-col items-center text-center">
-          <Image src="/quizwhiz-full-logo.png" alt="QuizWhiz" width={210} height={171} priority />
-          <p className="mt-1 text-sm text-zinc-500">Create an account to get started.</p>
+  if (!isDemoMode && (await isInstanceClaimed())) {
+    return (
+      <div className="flex flex-1 items-center justify-center bg-zinc-50 px-4">
+        <div className="w-full max-w-sm rounded-2xl border border-zinc-200 bg-white p-8 text-center shadow-sm">
+          <h1 className="text-xl font-semibold tracking-tight text-zinc-900">QuizWhiz</h1>
+          <p className="mt-3 text-sm text-zinc-500">This instance already has an owner.</p>
+          <p className="mt-6 text-sm text-zinc-500">
+            <Link href="/login" className="font-medium text-zinc-900 hover:underline">
+              Sign in
+            </Link>{" "}
+            instead.
+          </p>
         </div>
-
-        <form action={formAction} className="mt-6 flex flex-col gap-4">
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="email" className="text-sm font-medium text-zinc-700">
-              Email
-            </label>
-            <input
-              id="email"
-              name="email"
-              type="email"
-              required
-              autoComplete="email"
-              className="rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500"
-            />
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="password" className="text-sm font-medium text-zinc-700">
-              Password
-            </label>
-            <input
-              id="password"
-              name="password"
-              type="password"
-              required
-              minLength={8}
-              autoComplete="new-password"
-              className="rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500"
-            />
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="confirmPassword" className="text-sm font-medium text-zinc-700">
-              Confirm password
-            </label>
-            <input
-              id="confirmPassword"
-              name="confirmPassword"
-              type="password"
-              required
-              minLength={8}
-              autoComplete="new-password"
-              className="rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500"
-            />
-          </div>
-
-          {state.error && <p className="text-sm text-red-600">{state.error}</p>}
-
-          <button
-            type="submit"
-            disabled={pending}
-            className="mt-2 rounded-lg bg-zinc-900 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:opacity-50"
-          >
-            {pending ? "Creating account…" : "Create account"}
-          </button>
-        </form>
-
-        <p className="mt-6 text-center text-sm text-zinc-500">
-          Already have an account?{" "}
-          <Link href="/login" className="font-medium text-zinc-900 hover:underline">
-            Sign in
-          </Link>
-        </p>
-
-        {/* Docs/8-Pivot-Addendum.md §9.4 — the short form of the demo/data
-            disclaimer, shown before anyone commits an email. The full
-            version, with the per-account isolation specific, lives in
-            Settings (app/(app)/settings/page.tsx) for anyone who wants more
-            detail once signed in. */}
-        <p className="mt-4 text-center text-xs text-zinc-400">
-          QuizWhiz is a free portfolio demo, not a committed ongoing service — data isn&apos;t
-          guaranteed to persist. We store the email you sign up with and whatever you type into
-          the app.
-        </p>
       </div>
-    </div>
-  );
+    );
+  }
+
+  return <SignUpForm isDemoMode={isDemoMode} />;
 }

@@ -39,7 +39,15 @@ import { createClient } from "@/lib/supabase/server";
 // draining and the API failing closed, not an unbounded bill. This cap
 // shapes normal demo usage; it is not the thing standing between this app
 // and a large bill from a determined abuser.
+//
+// Self-host deployments (self-host Phase 1, Docs/8-Pivot-Addendum.md §7)
+// skip this entirely — no artificial limit on a self-hoster's own paid key,
+// and no point spending a DB round trip on a check that always passes.
 export async function checkAndConsumeAiUsage(): Promise<{ allowed: boolean; message?: string }> {
+  if (process.env.NEXT_PUBLIC_DEMO_MODE !== "true") {
+    return { allowed: true };
+  }
+
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("increment_and_check_ai_usage").single<{
     allowed: boolean;

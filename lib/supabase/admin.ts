@@ -1,5 +1,6 @@
 import "server-only";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
+import { getSupabaseServiceRoleKey } from "../env";
 
 // Service-role client — bypasses RLS. Server-only (the "server-only" import
 // above throws a build error if this is ever pulled into client code).
@@ -10,7 +11,7 @@ import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 export function createAdminClient() {
   return createSupabaseClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    getSupabaseServiceRoleKey()!,
     { auth: { autoRefreshToken: false, persistSession: false } }
   );
 }
