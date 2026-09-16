@@ -6,7 +6,7 @@ Scan a stack of paper multiple-choice reading quizzes, get instant AI-assisted g
 
 ## Deploy your own instance
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/clone?repository-url=https%3A%2F%2Fgithub.com%2FAllySalmon%2FQuizWhiz&env=ANTHROPIC_API_KEY&envDescription=Your%20Anthropic%20API%20key%2C%20used%20to%20read%20and%20grade%20scanned%20tests.%20Get%20one%20at%20console.anthropic.com.&envLink=https%3A%2F%2Fconsole.anthropic.com%2Fsettings%2Fkeys&project-name=quizwhiz&repository-name=quizwhiz&stores=%5B%7B%22type%22%3A%22integration%22%2C%22integrationSlug%22%3A%22supabase%22%2C%22productSlug%22%3A%22supabase%22%7D%5D)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FAllySalmon%2FQuizWhiz&env=ANTHROPIC_API_KEY&envDescription=Your%20Anthropic%20API%20key%2C%20used%20to%20read%20and%20grade%20scanned%20tests.%20Get%20one%20at%20console.anthropic.com.&envLink=https%3A%2F%2Fconsole.anthropic.com%2Fsettings%2Fkeys&project-name=quizwhiz&repository-name=quizwhiz&stores=%5B%7B%22type%22%3A%22integration%22%2C%22integrationSlug%22%3A%22supabase%22%2C%22productSlug%22%3A%22supabase%22%7D%5D)
 
 This is the fast path for a real, single-tenant deployment of your own — it provisions a fresh Supabase project automatically via Vercel's native Supabase integration, and runs the full database migration and storage bucket setup on first build (`scripts/setup-database.ts`) — no manual SQL, no CLI migration command. The one thing that can't be automated is your own [Anthropic API key](https://console.anthropic.com/settings/keys), which you'll be prompted for during the deploy flow.
 
