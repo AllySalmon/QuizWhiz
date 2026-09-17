@@ -13,9 +13,23 @@ import { createAdminClient } from "@/lib/supabase/admin";
 // anyway), and a dedicated table would be pure overhead for one global
 // boolean nothing else needs. Only ever called when NEXT_PUBLIC_DEMO_MODE
 // is off — see app/signup/page.tsx and app/signup/actions.ts.
+//
+// Checks for a CONFIRMED user specifically, not just any row — found live,
+// the hard way, during this feature's own first real test: a fresh
+// Supabase project defaults to "Confirm email" on, which this app's design
+// doesn't account for (no email-verification flow exists at all — see
+// app/signup/actions.ts). signUp() still inserts the auth.users row even
+// when it can't return a session, so the original "any row exists" check
+// let a single failed/unconfirmed attempt permanently lock the instance
+// out — nobody, including the real owner, could ever sign up again,
+// regardless of whether "Confirm email" gets turned off afterward. Two
+// unrelated people hit this independently on the same test deployment
+// before it was caught. perPage is generously above 1 (a single owner
+// realistically never approaches this) so an unconfirmed row occupying the
+// first page slot can't hide a real confirmed user behind it.
 export async function isInstanceClaimed() {
   const admin = createAdminClient();
-  const { data, error } = await admin.auth.admin.listUsers({ page: 1, perPage: 1 });
+  const { data, error } = await admin.auth.admin.listUsers({ page: 1, perPage: 100 });
   if (error) throw error;
-  return data.users.length > 0;
+  return data.users.some((u) => u.email_confirmed_at != null);
 }
