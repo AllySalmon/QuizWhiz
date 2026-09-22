@@ -3,6 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useActionState } from "react";
+import { PasswordInput } from "@/components/PasswordInput";
 import { signIn, type SignInState } from "./actions";
 
 const initialState: SignInState = { error: null };
@@ -37,14 +38,7 @@ export default function LoginPage() {
             <label htmlFor="password" className="text-sm font-medium text-zinc-700">
               Password
             </label>
-            <input
-              id="password"
-              name="password"
-              type="password"
-              required
-              autoComplete="current-password"
-              className="rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500"
-            />
+            <PasswordInput id="password" name="password" required autoComplete="current-password" />
           </div>
 
           {state.error && <p className="text-sm text-red-600">{state.error}</p>}

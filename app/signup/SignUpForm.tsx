@@ -3,6 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useActionState } from "react";
+import { PasswordInput } from "@/components/PasswordInput";
 import { signUp, type SignUpState } from "./actions";
 
 const initialState: SignUpState = { error: null };
@@ -37,29 +38,19 @@ export function SignUpForm({ isDemoMode }: { isDemoMode: boolean }) {
             <label htmlFor="password" className="text-sm font-medium text-zinc-700">
               Password
             </label>
-            <input
-              id="password"
-              name="password"
-              type="password"
-              required
-              minLength={8}
-              autoComplete="new-password"
-              className="rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500"
-            />
+            <PasswordInput id="password" name="password" required minLength={8} autoComplete="new-password" />
           </div>
 
           <div className="flex flex-col gap-1.5">
             <label htmlFor="confirmPassword" className="text-sm font-medium text-zinc-700">
               Confirm password
             </label>
-            <input
+            <PasswordInput
               id="confirmPassword"
               name="confirmPassword"
-              type="password"
               required
               minLength={8}
               autoComplete="new-password"
-              className="rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500"
             />
           </div>
 
