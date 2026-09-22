@@ -22,6 +22,7 @@ type TestRecordRow = {
   gradingStatus: "clean" | "needs_grading_review" | "resolved";
   assignmentStatus: "clean" | "needs_assignment_review" | "resolved";
   isDuplicate: boolean;
+  scanImageRef: string | null;
 };
 
 export function BatchTestRecordsTable({ batchId, records }: { batchId: string; records: TestRecordRow[] }) {
@@ -115,12 +116,19 @@ export function BatchTestRecordsTable({ batchId, records }: { batchId: string; r
                   </div>
                 </TableCell>
                 <TableCell className="text-right">
-                  <Link
-                    href={`/batches/${batchId}/${r.id}/delete`}
-                    className="text-sm font-medium text-destructive hover:underline"
-                  >
-                    Delete
-                  </Link>
+                  <div className="flex flex-col items-end gap-1">
+                    {r.scanImageRef && (
+                      <Link href={`/batches/${batchId}/${r.id}`} className="text-sm font-medium text-primary hover:underline">
+                        View scan
+                      </Link>
+                    )}
+                    <Link
+                      href={`/batches/${batchId}/${r.id}/delete`}
+                      className="text-sm font-medium text-destructive hover:underline"
+                    >
+                      Delete
+                    </Link>
+                  </div>
                 </TableCell>
               </TableRow>
             ))}

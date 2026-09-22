@@ -100,6 +100,11 @@ export default async function StudentHistoryPage({
                           Resolve assignment
                         </Link>
                       )}
+                      {r.scanImageRef && (
+                        <Link href={`/batches/${r.batchId}/${r.id}`} className="text-sm font-medium text-primary hover:underline">
+                          View scan
+                        </Link>
+                      )}
                       <Link href={`/batches/${r.batchId}`} className="text-sm text-muted-foreground hover:underline">
                         View batch
                       </Link>

@@ -1,6 +1,7 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { deleteScanImage, getSignedScanImageUrl } from "@/lib/supabase/storage";
+import { SCAN_IMAGE_GRACE_PERIOD_MS } from "./scanImageRetention";
 import { deleteBookReportByTestRecordId } from "./bookReports";
 import type { AnswerChoice } from "./answerKeys";
 
@@ -387,9 +388,16 @@ export async function correctAssignment(id: string, input: { studentNumber: stri
 }
 
 // Docs/5-Backend-Schema.md §2.6 retention: delete the scan image once both
-// statuses are resolved/clean. The time-based fallback sweep described in
-// that doc doesn't exist yet as a scheduled job anywhere in this codebase —
-// this event-driven half is the only retention mechanism that runs today.
+// statuses are resolved/clean. Also gated on SCAN_IMAGE_GRACE_PERIOD_MS
+// having elapsed (lib/db/queries/scanImageRetention.ts) — she needs a real
+// window to view what was scanned (app/(app)/batches/[id]/[recordId]/page.tsx),
+// not instant deletion. In practice this makes every call site below a
+// no-op: each one runs right at the moment a record becomes resolved, so
+// elapsed time is always ~0. The daily cron sweep (scanImageRetention.ts's
+// sweepExpiredScanImages, the only scheduled job in this codebase) is what
+// actually deletes expired images now — this check stays here anyway as a
+// safety net, in case a future call site ever invokes this later than
+// "immediately."
 export async function maybeDeleteScanImage(id: string) {
   const record = await getTestRecord(id);
   if (!record || !record.scanImageRef) return;
@@ -397,6 +405,9 @@ export async function maybeDeleteScanImage(id: string) {
   const gradingDone = record.gradingStatus === "clean" || record.gradingStatus === "resolved";
   const assignmentDone = record.assignmentStatus === "clean" || record.assignmentStatus === "resolved";
   if (!gradingDone || !assignmentDone) return;
+
+  const resolvedAt = record.reviewedAt ?? record.createdAt;
+  if (Date.now() - new Date(resolvedAt).getTime() < SCAN_IMAGE_GRACE_PERIOD_MS) return;
 
   await deleteScanImage(record.scanImageRef);
 
