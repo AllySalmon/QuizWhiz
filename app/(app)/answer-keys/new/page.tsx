@@ -1,5 +1,4 @@
-import { AnswerKeyForm } from "../AnswerKeyForm";
-import { createAnswerKeyAction } from "../actions";
+import { NewAnswerKeyClient } from "../NewAnswerKeyClient";
 
 export default function NewAnswerKeyPage() {
   return (
@@ -10,7 +9,7 @@ export default function NewAnswerKeyPage() {
       </p>
 
       <div className="mt-6">
-        <AnswerKeyForm mode="create" action={createAnswerKeyAction} />
+        <NewAnswerKeyClient />
       </div>
     </div>
   );

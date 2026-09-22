@@ -15,7 +15,11 @@ type Props = {
   initial?: {
     quizCode: string;
     bookTitle: string;
-    gradeBand: "jr" | "3-5";
+    gradeBand?: "jr" | "3-5";
+    // Overrides initial?.questions.length when set — needed when a scanned
+    // read (ScanAnswerKeyUpload.tsx) omits low-confidence questions from
+    // `questions` but still knows the sheet's real total.
+    questionCount?: number;
     questions: { questionNumber: number; correctAnswer: AnswerChoice }[];
   };
 };
@@ -26,7 +30,7 @@ const GRADE_BAND_LABEL = { jr: "SSYRA Jr.", "3-5": "SSYRA 3–5" } as const;
 
 export function AnswerKeyForm({ mode, action, initial }: Props) {
   const [state, formAction, pending] = useActionState(action, initialState);
-  const [questionCount, setQuestionCount] = useState(initial?.questions.length ?? 5);
+  const [questionCount, setQuestionCount] = useState(initial?.questionCount ?? initial?.questions.length ?? 5);
 
   return (
     <form action={formAction} className="flex flex-col gap-6">
