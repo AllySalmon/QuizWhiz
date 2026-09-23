@@ -44,12 +44,20 @@ export default async function AnswerKeysPage() {
                   <TableCell>{GRADE_BAND_LABEL[key.gradeBand]}</TableCell>
                   <TableCell>{key.questionCount}</TableCell>
                   <TableCell className="text-right">
-                    <Link
-                      href={`/answer-keys/${key.id}/edit`}
-                      className="text-sm font-medium text-primary hover:underline"
-                    >
-                      Edit
-                    </Link>
+                    <div className="flex justify-end gap-3">
+                      <Link
+                        href={`/answer-keys/${key.id}/edit`}
+                        className="text-sm font-medium text-primary hover:underline"
+                      >
+                        Edit
+                      </Link>
+                      <Link
+                        href={`/answer-keys/${key.id}/delete`}
+                        className="text-sm font-medium text-destructive hover:underline"
+                      >
+                        Delete
+                      </Link>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}

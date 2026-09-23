@@ -188,6 +188,24 @@ export async function updateAnswerKey(
   return key;
 }
 
+// answer_key_questions' FK is ON DELETE no action (lib/db/migrations/0000_nasty_otto_octavius.sql)
+// — its rows have to go first, same two-step order updateAnswerKey already
+// uses. quiz_code on test_records is deliberately not a real FK (see file
+// header), so this never touches test_records: any test already graded
+// against this key keeps its score as historical data; a new scan with
+// this quiz code just won't match anything until the key is re-added. The
+// delete confirmation page surfaces that distinction rather than silently
+// leaving it implicit.
+export async function deleteAnswerKey(id: string) {
+  const supabase = await createClient();
+
+  const { error: qError } = await supabase.from("answer_key_questions").delete().eq("answer_key_id", id);
+  if (qError) throw qError;
+
+  const { error } = await supabase.from("answer_keys").delete().eq("id", id);
+  if (error) throw error;
+}
+
 export async function listQuizCodes() {
   const supabase = await createClient();
   const { data, error } = await supabase

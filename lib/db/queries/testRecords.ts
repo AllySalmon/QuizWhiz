@@ -491,6 +491,20 @@ export async function reconcileTestsForNewAnswerKey(
   return (stuck ?? []).length;
 }
 
+// Used by the answer-key delete confirmation page — quiz_code isn't a real
+// FK (see file header), so deleting a key can't cascade here anyway; this
+// is purely informational, telling her how many already-graded tests used
+// the key she's about to remove.
+export async function countTestRecordsForQuizCode(quizCode: string) {
+  const supabase = await createClient();
+  const { count, error } = await supabase
+    .from("test_records")
+    .select("*", { count: "exact", head: true })
+    .eq("quiz_code", quizCode);
+  if (error) throw error;
+  return count ?? 0;
+}
+
 export async function countsForBatch(batchId: string) {
   const supabase = await createClient();
   const { data, error } = await supabase

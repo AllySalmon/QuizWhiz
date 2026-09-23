@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import {
   createAnswerKey,
   updateAnswerKey,
+  deleteAnswerKey,
   listQuizCodes,
   createManyAnswerKeys,
   type AnswerChoice,
@@ -123,6 +124,11 @@ export async function updateAnswerKeyAction(
 
   await updateAnswerKey(id, { bookTitle: bookTitle.trim(), gradeBand: gradeBand as GradeBand, questions });
 
+  redirect("/answer-keys");
+}
+
+export async function deleteAnswerKeyAction(id: string) {
+  await deleteAnswerKey(id);
   redirect("/answer-keys");
 }
 

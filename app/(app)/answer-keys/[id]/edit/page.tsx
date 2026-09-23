@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getAnswerKeyWithQuestions } from "@/lib/db/queries/answerKeys";
 import { AnswerKeyForm } from "../../AnswerKeyForm";
@@ -12,8 +13,15 @@ export default async function EditAnswerKeyPage({ params }: { params: Promise<{ 
 
   return (
     <div className="mx-auto max-w-2xl">
-      <h1 className="text-2xl font-semibold tracking-tight text-foreground">Edit answer key</h1>
-      <p className="mt-1 text-sm text-muted-foreground">{key.bookTitle}</p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Edit answer key</h1>
+          <p className="mt-1 text-sm text-muted-foreground">{key.bookTitle}</p>
+        </div>
+        <Link href={`/answer-keys/${id}/delete`} className="text-sm font-medium text-destructive hover:underline">
+          Delete
+        </Link>
+      </div>
 
       <div className="mt-6">
         <AnswerKeyForm
