@@ -143,6 +143,19 @@ export async function csvImportAnswerKeysAction(
     return { error: "Choose a CSV file.", summary: null };
   }
 
+  // A real point of confusion once the photo/PDF scan reader shipped
+  // (app/(app)/answer-keys/ScanAnswerKeyUpload.tsx, on /answer-keys/new) —
+  // dropping a PDF/photo in here instead used to fall through to "No
+  // question columns found," which doesn't say what actually went wrong or
+  // where the file the user meant to use actually belongs.
+  if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf") || file.type.startsWith("image/")) {
+    return {
+      error:
+        'This box is for CSV bulk import only. For a single answer key from a photo or PDF, use "Add answer key" instead — it has a scan/upload option that reads it with AI.',
+      summary: null,
+    };
+  }
+
   const text = await file.text();
   const existingQuizCodes = await listQuizCodes();
   const result = parseAnswerKeyCsv(text, existingQuizCodes);

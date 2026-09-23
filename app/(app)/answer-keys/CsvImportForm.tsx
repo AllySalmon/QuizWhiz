@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -22,6 +23,13 @@ export function CsvImportForm() {
         <code className="rounded bg-muted px-1 py-0.5">3-5</code>), then one column per question:{" "}
         <code className="rounded bg-muted px-1 py-0.5">q1</code>,{" "}
         <code className="rounded bg-muted px-1 py-0.5">q2</code>, … each holding A/B/C/D.
+      </p>
+      <p className="mt-1 text-xs text-muted-foreground">
+        Have a photo or PDF of one answer key instead of a CSV?{" "}
+        <Link href="/answer-keys/new" className="font-medium text-primary hover:underline">
+          Add answer key
+        </Link>{" "}
+        has a scan/upload option that reads it with AI.
       </p>
 
       <form
