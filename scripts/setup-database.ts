@@ -42,6 +42,7 @@ const SQL_FILES = [
   "roster-rls.sql",
   "roster-functions.sql",
   "ai-usage-cap.sql",
+  "pilot-rls.sql",
 ];
 
 async function main() {
