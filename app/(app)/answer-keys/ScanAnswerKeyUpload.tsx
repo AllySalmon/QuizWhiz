@@ -50,6 +50,24 @@ export function ScanAnswerKeyUpload({ onRead }: { onRead: (scanned: ScannedAnswe
 
     try {
       const normalized = await tryNormalizeImageForUpload(files[0]);
+
+      // Catches a bad conversion client-side (e.g. a PDF page that rendered
+      // to an empty/corrupt canvas) with a clear, specific message, instead
+      // of sending it to the server to fail with sharp's generic "not a
+      // recognizable image" error — which fires for any unparseable buffer,
+      // not just a literal non-image file, so it doesn't actually say what
+      // went wrong.
+      try {
+        const probe = await createImageBitmap(normalized);
+        probe.close();
+      } catch {
+        throw new Error(
+          files.length > 1 || files[0].name.includes("-p1.")
+            ? `That PDF page didn't convert to a readable image. Try a different page, or a plain photo of the sheet instead.`
+            : `"${files[0].name}" isn't a readable image. Try a different file or a plain photo of the sheet instead.`
+        );
+      }
+
       const formData = new FormData();
       formData.append("image", normalized);
 
@@ -100,6 +118,18 @@ export function ScanAnswerKeyUpload({ onRead }: { onRead: (scanned: ScannedAnswe
           <Loader2 className="size-4 animate-spin text-primary" aria-hidden />
           <span>Preparing &ldquo;{preparing.fileName}&rdquo;…</span>
         </div>
+      )}
+
+      {/* The native input's own display can't be relied on — handleFilesSelected
+          resets its value immediately (so the same file can be re-picked
+          later), so without this the file input looks empty right after a
+          selection even though `files` state holds it. Shows the post-PDF-
+          expansion filename(s) on purpose — confirms conversion actually
+          happened, not just what was originally picked. */}
+      {!preparing && files.length > 0 && (
+        <p className="mt-3 text-sm text-foreground">
+          Selected: <span className="font-medium">{files.map((f) => f.name).join(", ")}</span>
+        </p>
       )}
 
       {error && (
